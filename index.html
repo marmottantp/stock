@@ -211,7 +211,7 @@ function StockApp({user, onLogout}){
   const [toast,setToast]             = useState(null);
   const [catEdit,setCatEdit]         = useState("");
   const [catRen,setCatRen]           = useState({});
-  const nP=useRef(7),nM=useRef(3),nL=useRef(4);
+  const nP=useRef(1000),nM=useRef(1000),nL=useRef(1000);
   const saveT=useRef(null);
   const userName = user.split("@")[0].charAt(0).toUpperCase()+user.split("@")[0].slice(1);
 
@@ -235,9 +235,9 @@ function StockApp({user, onLogout}){
         onSnapshot(doc(db,"stockflow","data"),s=>{
           if(s.exists()){
             const d=s.data();
-            if(d.products){setProducts(d.products);nP.current=Math.max(...d.products.map(x=>x.id))+1;}
-            if(d.movements){setMovements(d.movements);nM.current=Math.max(...d.movements.map(x=>x.id))+1;}
-            if(d.locations){setLocations(d.locations);nL.current=Math.max(...d.locations.map(x=>x.id))+1;}
+            if(d.products){setProducts(d.products);nP.current=Math.max(nP.current,...d.products.map(x=>x.id))+1;}
+            if(d.movements){setMovements(d.movements);nM.current=Math.max(nM.current,...d.movements.map(x=>x.id))+1;}
+            if(d.locations){setLocations(d.locations);nL.current=Math.max(nL.current,...d.locations.map(x=>x.id))+1;}
             if(d.locationStock)setLS(d.locationStock);
             if(d.categories)setCategories(d.categories);
             setLastSync(new Date());
@@ -328,12 +328,13 @@ function StockApp({user, onLogout}){
 
   const handleAddProd=()=>{
     if(!form.name||!form.sku||!form.category)return showToast("Champs obligatoires manquants","error");
-    const np={id:nP.current++,name:form.name,sku:form.sku,category:form.category,minStock:parseInt(form.minStock)||5,unitPrice:parseFloat(form.unitPrice)||0,unit:form.unit||"unite"};
+    const newId=Date.now();
+    const np={id:newId,name:form.name,sku:form.sku,category:form.category,minStock:parseInt(form.minStock)||5,unitPrice:parseFloat(form.unitPrice)||0,unit:form.unit||"unite"};
     const nprods=[...products,np];
     let nls={...locationStock},nm=[...movements];
     if(form.locationId&&form.initQty&&parseInt(form.initQty)>0){
-      nls[np.id+"_"+form.locationId]=parseInt(form.initQty);
-      nm=[...nm,{id:nM.current++,date:TODAY,type:"entree",productId:np.id,locationId:parseInt(form.locationId),quantity:parseInt(form.initQty),reason:"Stock initial",ref:"INIT",user}];
+      nls[newId+"_"+form.locationId]=parseInt(form.initQty);
+      nm=[...nm,{id:newId+1,date:TODAY,type:"entree",productId:newId,locationId:parseInt(form.locationId),quantity:parseInt(form.initQty),reason:"Stock initial",ref:"INIT",user}];
       setMovements(nm);setLS(nls);
     }
     setProducts(nprods);saveAll(nprods,nm,null,nls,null);
