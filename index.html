@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockFlow — Marmottan TP</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    const cfg = {
+      apiKey: "AIzaSyCnRgJTXjBvHYwAxoGk_iUvQtC72wk2274",
+      authDomain: "stock-marmottan-tp.firebaseapp.com",
+      projectId: "stock-marmottan-tp",
+      storageBucket: "stock-marmottan-tp.firebasestorage.app",
+      messagingSenderId: "1085068993204",
+      appId: "1:1085068993204:web:84de77250e17d2df50ade1"
+    };
+    const app = initializeApp(cfg);
+    window._db  = getFirestore(app);
+    window._auth = getAuth(app);
+    window._fs  = { doc, setDoc, getDoc, onSnapshot };
+    window._fa  = { signInWithEmailAndPassword, signOut, onAuthStateChanged };
+    window._fbReady = true;
+    window.dispatchEvent(new Event("fb-ready"));
+  </script>
+  <style>body{margin:0;padding:0;background:#0f0f0f;}</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+const USERS = [
+  "olivier@marmottantp.fr",
+  "lionel@marmottantp.fr",
+  "cyril@marmottantp.fr",
+  "stephane@marmottantp.fr",
+  "leo@marmottantp.fr"
+];
+
+const DEF_CATS = ["Electronique","Peripheriques","Cablage","Fournitures","Mobilier"];
+const DEF_LOCS = [
+  {id:1,name:"Entrepot Principal",code:"ENT-A",color:"#6090e0"},
+  {id:2,name:"Reserve Batiment B",code:"RES-B",color:"#4caf7c"},
+  {id:3,name:"Salle Materiel",code:"SAL-M",color:"#f0a040"}
+];
+const DEF_LS = {"1_1":30,"1_2":8,"1_3":4,"2_1":5,"2_3":3,"3_1":80,"3_2":40,"4_2":3,"4_3":2,"5_1":1,"5_2":2,"6_1":24};
+const DEF_PRODS = [
+  {id:1,name:"Ecrans 27 pouces",sku:"ECR-27-4K",category:"Electronique",minStock:10,unitPrice:349,unit:"unite"},
+  {id:2,name:"Clavier mecanique",sku:"CLV-MEC-01",category:"Peripheriques",minStock:15,unitPrice:89,unit:"unite"},
+  {id:3,name:"Cable HDMI 2m",sku:"CAB-HDM-2M",category:"Cablage",minStock:30,unitPrice:12,unit:"unite"},
+  {id:4,name:"Papier A4",sku:"PAP-A4-500",category:"Fournitures",minStock:20,unitPrice:6.5,unit:"ramette"},
+  {id:5,name:"Chaise ergonomique",sku:"CHR-ERG-BLK",category:"Mobilier",minStock:5,unitPrice:450,unit:"unite"},
+  {id:6,name:"Cartouche encre noire",sku:"CRT-INK-BLK",category:"Fournitures",minStock:10,unitPrice:18,unit:"unite"},
+];
+const DEF_MOVS = [
+  {id:1,date:"2026-03-08",type:"entree",productId:1,locationId:1,quantity:20,reason:"Commande fournisseur",ref:"CMD-2026-021",user:"olivier@marmottantp.fr"},
+  {id:2,date:"2026-03-09",type:"sortie",productId:2,locationId:3,quantity:3,reason:"Attribution poste",ref:"ATT-2026-012",user:"lionel@marmottantp.fr"},
+];
+const TODAY = new Date().toISOString().split("T")[0];
+const LOC_COLORS = ["#6090e0","#4caf7c","#f0a040","#e07080","#b080e0","#60c0d0","#e0c040"];
+
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#1a1a1a}::-webkit-scrollbar-thumb{background:#444;border-radius:2px}
+input,select{outline:none}
+.nb{background:none;border:none;cursor:pointer;padding:10px 16px;font-family:'DM Mono',monospace;font-size:13px;color:#777;transition:all .2s;border-bottom:2px solid transparent}
+.nb:hover{color:#e8e4dc}.nb.a{color:#f0c040;border-bottom:2px solid #f0c040}
+.card{background:#1a1a1a;border:1px solid #252525;border-radius:4px}
+.bp{background:#f0c040;color:#0f0f0f;border:none;padding:10px 20px;cursor:pointer;font-family:'DM Mono',monospace;font-size:13px;font-weight:500;border-radius:2px;transition:all .15s}
+.bp:hover{background:#ffd060;transform:translateY(-1px)}
+.bo{background:none;border:1px solid #333;color:#999;padding:8px 16px;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px;border-radius:2px;transition:all .15s}
+.bo:hover{border-color:#777;color:#e8e4dc}
+.bg{background:none;border:none;color:#666;padding:6px 12px;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px;border-radius:2px;transition:all .15s}
+.bg:hover{color:#e8e4dc;background:#222}
+.bd{background:none;border:1px solid #8b2020;color:#e05050;padding:8px 16px;cursor:pointer;font-family:'DM Mono',monospace;font-size:12px;border-radius:2px;transition:all .15s}
+.bd:hover{background:#8b2020;color:#fff}
+.bsm{background:none;border:none;color:#555;font-size:12px;padding:4px 8px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;transition:all .15s}
+.bsm:hover{color:#e8e4dc;background:#252525}
+.if{background:#141414;border:1px solid #2a2a2a;color:#e8e4dc;padding:10px 14px;font-family:'DM Mono',monospace;font-size:13px;border-radius:2px;width:100%;transition:border .2s}
+.if:focus{border-color:#f0c040}
+.bok{background:#152a1e;color:#4caf7c;padding:3px 8px;border-radius:2px;font-size:11px}
+.blow{background:#2a1515;color:#e07060;padding:3px 8px;border-radius:2px;font-size:11px}
+.bwn{background:#2a2010;color:#f0a040;padding:3px 8px;border-radius:2px;font-size:11px}
+.tin{background:#0a2016;color:#4caf7c;border:1px solid #154028;padding:2px 8px;border-radius:2px;font-size:11px;white-space:nowrap}
+.tout{background:#200a0a;color:#e07060;border:1px solid #401515;padding:2px 8px;border-radius:2px;font-size:11px;white-space:nowrap}
+.ttrf{background:#0a1020;color:#6090e0;border:1px solid #152040;padding:2px 8px;border-radius:2px;font-size:11px;white-space:nowrap}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+.mb{background:#161616;border:1px solid #252525;border-radius:4px;padding:32px;width:540px;max-width:95vw;max-height:90vh;overflow-y:auto}
+tr:hover td{background:#1c1c1c}
+.sc{background:#141414;border:1px solid #1e1e1e;border-radius:4px;padding:22px;position:relative;overflow:hidden}
+.sc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.sc.y::before{background:#f0c040}.sc.g::before{background:#4caf7c}.sc.r::before{background:#e07060}.sc.b::before{background:#6090e0}
+@keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.fi{animation:fi .3s ease}
+@keyframes si{from{transform:translateX(10px);opacity:0}to{transform:translateX(0);opacity:1}}
+.toast{position:fixed;bottom:28px;right:28px;background:#1a1a1a;border:1px solid #333;padding:12px 18px;border-radius:4px;font-size:13px;z-index:200;animation:si .3s ease;display:flex;align-items:center;gap:8px}
+.toast.success{border-left:3px solid #4caf7c}.toast.error{border-left:3px solid #e07060}
+.rb{background:none;border:none;cursor:pointer;color:#555;font-size:14px;padding:3px 7px;border-radius:2px;transition:all .15s}
+.rb:hover{color:#f0c040;background:#252510}
+table{border-collapse:collapse;width:100%}
+th{font-weight:500;font-size:11px;color:#555;letter-spacing:.08em;text-transform:uppercase;padding:11px 14px;border-bottom:1px solid #1e1e1e;text-align:left}
+td{padding:10px 14px;font-size:13px;border-bottom:1px solid #181818;vertical-align:middle}
+.lp{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:2px;font-size:11px;margin:2px}
+.pb{background:#222;border-radius:2px;height:4px;overflow:hidden}.pf{height:100%;border-radius:2px;transition:width .3s}
+.cat-row{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid #1e1e1e;transition:background .15s}
+.cat-row:hover{background:#1c1c1c}
+.cat-chip{display:inline-block;background:#1e1e1e;border:1px solid #2e2e2e;color:#aaa;padding:5px 14px;border-radius:2px;font-size:12px;cursor:pointer;transition:all .15s;font-family:'DM Mono',monospace}
+.cat-chip:hover{border-color:#f0c040;color:#f0c040}
+.cat-chip.active{background:#252010;border-color:#f0c040;color:#f0c040}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}.syncing{animation:pulse 1.2s infinite}
+`;
+
+// ── LOGIN ──────────────────────────────────────────────────────────────────
+function LoginScreen({onLogin}){
+  const [email,setEmail]   = useState("");
+  const [pwd,setPwd]       = useState("");
+  const [show,setShow]     = useState(false);
+  const [loading,setLoading] = useState(false);
+  const [err,setErr]       = useState("");
+
+  const go = async () => {
+    if(!email||!pwd){setErr("Remplissez les deux champs.");return;}
+    setLoading(true);setErr("");
+    try{
+      if(!window._fbReady) await new Promise(r=>window.addEventListener("fb-ready",r,{once:true}));
+      await window._fa.signInWithEmailAndPassword(window._auth, email.trim(), pwd);
+      onLogin(email.trim());
+    }catch(e){
+      const msg = e.code==="auth/invalid-credential"||e.code==="auth/wrong-password"||e.code==="auth/user-not-found"
+        ? "Email ou mot de passe incorrect."
+        : e.code==="auth/too-many-requests"
+        ? "Trop de tentatives. Reessayez dans quelques minutes."
+        : "Erreur de connexion. Verifiez votre connexion internet.";
+      setErr(msg);
+    }finally{setLoading(false);}
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0f0f0f",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono',monospace"}}>
+      <style>{CSS}</style>
+      <div style={{width:400,padding:44,background:"#161616",border:"1px solid #252525",borderRadius:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8}}>
+          <div style={{width:38,height:38,background:"#f0c040",borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:20,fontWeight:700,color:"#0f0f0f"}}>S</span>
+          </div>
+          <div>
+            <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:17,color:"#e8e4dc",letterSpacing:".1em"}}>STOCKFLOW</div>
+            <div style={{fontSize:11,color:"#555",letterSpacing:".05em"}}>Marmottan TP</div>
+          </div>
+        </div>
+        <div style={{borderBottom:"1px solid #222",marginBottom:28,paddingBottom:0}}/>
+
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,color:"#555",marginBottom:6,textTransform:"uppercase",letterSpacing:".08em"}}>Adresse email</label>
+          <select className="if" value={email} onChange={e=>setEmail(e.target.value)}>
+            <option value="">-- Choisir votre compte --</option>
+            {USERS.map(u=><option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+
+        <div style={{marginBottom:err?8:20}}>
+          <label style={{display:"block",fontSize:11,color:"#555",marginBottom:6,textTransform:"uppercase",letterSpacing:".08em"}}>Mot de passe</label>
+          <div style={{position:"relative"}}>
+            <input type={show?"text":"password"} placeholder="Votre mot de passe..." value={pwd}
+              onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}
+              style={{width:"100%",background:"#141414",border:"1px solid "+(err?"#e07060":"#2a2a2a"),color:"#e8e4dc",padding:"10px 44px 10px 14px",fontFamily:"'DM Mono',monospace",fontSize:13,borderRadius:2,outline:"none",boxSizing:"border-box",transition:"border .2s"}}/>
+            <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:13,fontFamily:"'DM Mono',monospace",padding:0}}>
+              {show?"cacher":"voir"}
+            </button>
+          </div>
+        </div>
+
+        {err&&<p style={{color:"#e07060",fontSize:12,marginBottom:16,lineHeight:1.5}}>{err}</p>}
+
+        <button onClick={go} disabled={loading}
+          style={{width:"100%",background:loading?"#c8a030":"#f0c040",color:"#0f0f0f",border:"none",padding:"12px",fontFamily:"'DM Mono',monospace",fontSize:14,fontWeight:500,borderRadius:2,cursor:loading?"not-allowed":"pointer",transition:"background .15s"}}>
+          {loading?"Connexion en cours...":"Se connecter"}
+        </button>
+
+        <p style={{fontSize:11,color:"#333",marginTop:18,textAlign:"center",lineHeight:1.6}}>
+          Acces reserve aux employes Marmottan TP<br/>
+          Les mots de passe sont geres par l'administrateur
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ───────────────────────────────────────────────────────────────
+function StockApp({user, onLogout}){
+  const [products,setProducts]       = useState(DEF_PRODS);
+  const [movements,setMovements]     = useState(DEF_MOVS);
+  const [locations,setLocations]     = useState(DEF_LOCS);
+  const [locationStock,setLS]        = useState(DEF_LS);
+  const [categories,setCategories]   = useState(DEF_CATS);
+  const [dbReady,setDbReady]         = useState(false);
+  const [syncing,setSyncing]         = useState(false);
+  const [lastSync,setLastSync]       = useState(null);
+  const [view,setView]               = useState("dashboard");
+  const [search,setSearch]           = useState("");
+  const [filterCat,setFilterCat]     = useState("Tous");
+  const [filterLoc,setFilterLoc]     = useState("Tous");
+  const [sortBy,setSortBy]           = useState("name");
+  const [modal,setModal]             = useState(null);
+  const [form,setForm]               = useState({});
+  const [toast,setToast]             = useState(null);
+  const [catEdit,setCatEdit]         = useState("");
+  const [catRen,setCatRen]           = useState({});
+  const nP=useRef(7),nM=useRef(3),nL=useRef(4);
+  const saveT=useRef(null);
+  const userName = user.split("@")[0].charAt(0).toUpperCase()+user.split("@")[0].slice(1);
+
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
+
+  useEffect(()=>{
+    const init=async()=>{
+      if(!window._fbReady)await new Promise(r=>window.addEventListener("fb-ready",r,{once:true}));
+      const{doc,getDoc,onSnapshot}=window._fs,db=window._db;
+      try{
+        const snap=await getDoc(doc(db,"stockflow","data"));
+        if(snap.exists()){
+          const d=snap.data();
+          if(d.products){setProducts(d.products);nP.current=Math.max(...d.products.map(x=>x.id))+1;}
+          if(d.movements){setMovements(d.movements);nM.current=Math.max(...d.movements.map(x=>x.id))+1;}
+          if(d.locations){setLocations(d.locations);nL.current=Math.max(...d.locations.map(x=>x.id))+1;}
+          if(d.locationStock)setLS(d.locationStock);
+          if(d.categories)setCategories(d.categories);
+        }
+        setDbReady(true);setLastSync(new Date());
+        onSnapshot(doc(db,"stockflow","data"),s=>{
+          if(s.exists()){
+            const d=s.data();
+            if(d.products){setProducts(d.products);nP.current=Math.max(...d.products.map(x=>x.id))+1;}
+            if(d.movements){setMovements(d.movements);nM.current=Math.max(...d.movements.map(x=>x.id))+1;}
+            if(d.locations){setLocations(d.locations);nL.current=Math.max(...d.locations.map(x=>x.id))+1;}
+            if(d.locationStock)setLS(d.locationStock);
+            if(d.categories)setCategories(d.categories);
+            setLastSync(new Date());
+          }
+        });
+      }catch(e){showToast("Erreur Firebase","error");setDbReady(true);}
+    };
+    init();
+  },[]);
+
+  const save=useCallback((data)=>{
+    if(!window._fbReady)return;
+    if(saveT.current)clearTimeout(saveT.current);
+    saveT.current=setTimeout(async()=>{
+      setSyncing(true);
+      try{
+        const{doc,setDoc}=window._fs;
+        await setDoc(doc(window._db,"stockflow","data"),data);
+        setLastSync(new Date());
+      }catch{showToast("Erreur sauvegarde","error");}
+      finally{setSyncing(false);}
+    },600);
+  },[]);
+
+  const saveAll=(p,m,l,ls,c)=>save({
+    products:p||products,movements:m||movements,locations:l||locations,
+    locationStock:ls||locationStock,categories:c||categories
+  });
+
+  const getTS=pid=>Object.entries(locationStock).filter(([k])=>k.startsWith(pid+"_")).reduce((s,[,v])=>s+v,0);
+  const getLS2=(pid,lid)=>locationStock[pid+"_"+lid]||0;
+  const getLN=id=>locations.find(l=>l.id===id)?.name||"--";
+  const getLC=id=>locations.find(l=>l.id===id)?.color||"#888";
+  const getPN=id=>products.find(p=>p.id===id)?.name||"--";
+
+  const enr=products.map(p=>({...p,quantity:getTS(p.id)}));
+  const fil=enr
+    .filter(p=>filterCat==="Tous"||p.category===filterCat)
+    .filter(p=>filterLoc==="Tous"||getLS2(p.id,parseInt(filterLoc))>0)
+    .filter(p=>p.name.toLowerCase().includes(search.toLowerCase())||p.sku.toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b)=>sortBy==="name"?a.name.localeCompare(b.name):sortBy==="quantity"?b.quantity-a.quantity:b.unitPrice-a.unitPrice);
+
+  const lowStock=enr.filter(p=>p.quantity<=p.minStock);
+  const totalVal=enr.reduce((a,p)=>a+p.quantity*p.unitPrice,0);
+  const todayMov=movements.filter(m=>m.date===TODAY);
+
+  const addCat=()=>{
+    const n=catEdit.trim();
+    if(!n)return showToast("Entrez un nom","error");
+    if(categories.includes(n))return showToast("Existe deja","error");
+    const nc=[...categories,n];setCategories(nc);setCatEdit("");
+    saveAll(null,null,null,null,nc);showToast("Categorie ajoutee !");
+  };
+  const renameCat=(old,nw)=>{
+    nw=nw.trim();
+    if(!nw)return showToast("Nom vide","error");
+    if(categories.includes(nw)&&nw!==old)return showToast("Existe deja","error");
+    const nc=categories.map(c=>c===old?nw:c);
+    const np=products.map(p=>p.category===old?{...p,category:nw}:p);
+    setCategories(nc);setProducts(np);setCatRen({});
+    saveAll(np,null,null,null,nc);showToast("Renommee !");
+  };
+  const delCat=n=>{
+    if(products.some(p=>p.category===n))return showToast("Utilisee par des produits","error");
+    const nc=categories.filter(c=>c!==n);setCategories(nc);
+    if(filterCat===n)setFilterCat("Tous");
+    saveAll(null,null,null,null,nc);showToast("Supprimee");
+  };
+
+  const handleMov=()=>{
+    const{type,productId,locationId,toLocationId,quantity,reason,ref}=form;
+    if(!productId||!locationId||!quantity||!reason)return showToast("Champs obligatoires manquants","error");
+    if(type==="transfert"&&!toLocationId)return showToast("Choisissez destination","error");
+    if(type==="transfert"&&locationId===toLocationId)return showToast("Lieux identiques","error");
+    const qty=parseInt(quantity),pId=parseInt(productId),lId=parseInt(locationId),toLId=toLocationId?parseInt(toLocationId):null;
+    const src=getLS2(pId,lId);
+    if((type==="sortie"||type==="transfert")&&src<qty)return showToast("Stock insuffisant ("+src+" dispo)","error");
+    const nls={...locationStock},k=pId+"_"+lId,tk=pId+"_"+toLId;
+    if(type==="entree")nls[k]=(nls[k]||0)+qty;
+    if(type==="sortie")nls[k]=(nls[k]||0)-qty;
+    if(type==="transfert"){nls[k]=(nls[k]||0)-qty;nls[tk]=(nls[tk]||0)+qty;}
+    Object.keys(nls).forEach(k2=>{if(nls[k2]<=0)delete nls[k2];});
+    const nm=[...movements,{id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId,quantity:qty,reason,ref:ref||(type.slice(0,3).toUpperCase()+"-"+String(nM.current).padStart(3,"0")),user}];
+    setLS(nls);setMovements(nm);
+    saveAll(null,nm,null,nls,null);
+    showToast("Mouvement enregistre !");setModal(null);setForm({});
+  };
+
+  const handleAddProd=()=>{
+    if(!form.name||!form.sku||!form.category)return showToast("Champs obligatoires manquants","error");
+    const np={id:nP.current++,name:form.name,sku:form.sku,category:form.category,minStock:parseInt(form.minStock)||5,unitPrice:parseFloat(form.unitPrice)||0,unit:form.unit||"unite"};
+    const nprods=[...products,np];
+    let nls={...locationStock},nm=[...movements];
+    if(form.locationId&&form.initQty&&parseInt(form.initQty)>0){
+      nls[np.id+"_"+form.locationId]=parseInt(form.initQty);
+      nm=[...nm,{id:nM.current++,date:TODAY,type:"entree",productId:np.id,locationId:parseInt(form.locationId),quantity:parseInt(form.initQty),reason:"Stock initial",ref:"INIT",user}];
+      setMovements(nm);setLS(nls);
+    }
+    setProducts(nprods);saveAll(nprods,nm,null,nls,null);
+    showToast("Produit ajoute !");setModal(null);setForm({});
+  };
+
+  const handleAddLoc=()=>{
+    if(!form.name||!form.code)return showToast("Remplissez tous les champs","error");
+    const nl=[...locations,{id:nL.current++,name:form.name,code:form.code,color:form.color||"#888888"}];
+    setLocations(nl);saveAll(null,null,nl,null,null);
+    showToast("Lieu ajoute !");setModal(null);setForm({});
+  };
+
+  const delProd=id=>{
+    const np=products.filter(p=>p.id!==id);
+    const nls={...locationStock};Object.keys(nls).filter(k=>k.startsWith(id+"_")).forEach(k=>delete nls[k]);
+    setProducts(np);setLS(nls);saveAll(np,null,null,nls,null);
+    setModal(null);showToast("Produit supprime");
+  };
+  const delLoc=id=>{
+    if(Object.keys(locationStock).some(k=>k.endsWith("_"+id)))return showToast("Ce lieu contient des articles","error");
+    const nl=locations.filter(l=>l.id!==id);setLocations(nl);saveAll(null,null,nl,null,null);showToast("Lieu supprime");
+  };
+
+  const exportJSON=()=>{
+    const b=new Blob([JSON.stringify({products,movements,locations,locationStock,categories},null,2)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="stockflow_"+TODAY+".json";a.click();
+    showToast("Export JSON OK !");
+  };
+  const exportCSV=()=>{
+    const rows=[["Produit","SKU","Categorie","Lieu","Qte","P.U.","Valeur"]];
+    products.forEach(p=>locations.forEach(l=>{const q=getLS2(p.id,l.id);if(q>0)rows.push([p.name,p.sku,p.category,l.name,q,p.unitPrice,(q*p.unitPrice).toFixed(2)]);}));
+    const b=new Blob(["﻿"+rows.map(r=>r.map(c=>'"'+c+'"').join(";")).join("\n")],{type:"text/csv;charset=utf-8;"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="inventaire_"+TODAY+".csv";a.click();
+    showToast("Export CSV OK !");
+  };
+  const exportMouv=()=>{
+    const rows=[["Date","Type","Produit","Lieu source","Lieu dest.","Qte","Motif","Ref","Operateur"]];
+    [...movements].reverse().forEach(m=>{const p=products.find(x=>x.id===m.productId);rows.push([m.date,m.type,p?.name||"--",getLN(m.locationId),m.toLocationId?getLN(m.toLocationId):"",m.quantity,m.reason,m.ref,m.user]);});
+    const b=new Blob(["﻿"+rows.map(r=>r.map(c=>'"'+c+'"').join(";")).join("\n")],{type:"text/csv;charset=utf-8;"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="mouvements_"+TODAY+".csv";a.click();
+    showToast("Export mouvements OK !");
+  };
+  const importJSON=e=>{
+    const file=e.target.files[0];if(!file)return;
+    const r=new FileReader();
+    r.onload=ev=>{
+      try{
+        const d=JSON.parse(ev.target.result);
+        const np=d.products||products,nm=d.movements||movements,nl=d.locations||locations,nls=d.locationStock||locationStock,nc=d.categories||categories;
+        if(d.products){setProducts(np);nP.current=Math.max(...np.map(x=>x.id))+1;}
+        if(d.movements){setMovements(nm);nM.current=Math.max(...nm.map(x=>x.id))+1;}
+        if(d.locations){setLocations(nl);nL.current=Math.max(...nl.map(x=>x.id))+1;}
+        if(d.locationStock)setLS(nls);
+        if(d.categories)setCategories(nc);
+        saveAll(np,nm,nl,nls,nc);
+        showToast("Importe et synchronise !");
+      }catch{showToast("Fichier invalide","error");}
+    };
+    r.readAsText(file);e.target.value="";
+  };
+
+  const handleLogout=async()=>{
+    await window._fa.signOut(window._auth);
+    onLogout();
+  };
+
+  const tL=t=>t==="entree"?"Entree":t==="sortie"?"Sortie":"Transfert";
+  const tC=t=>t==="entree"?"tin":t==="sortie"?"tout":"ttrf";
+
+  if(!dbReady)return(
+    <div style={{minHeight:"100vh",background:"#0f0f0f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,color:"#555",fontFamily:"'DM Mono',monospace"}}>
+      <style>{CSS}</style>
+      <div style={{width:32,height:32,border:"2px solid #333",borderTop:"2px solid #f0c040",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+      <span style={{fontSize:13}}>Chargement des donnees...</span>
+    </div>
+  );
+
+  return(
+    <div style={{fontFamily:"'DM Mono',monospace",background:"#0f0f0f",minHeight:"100vh",color:"#e8e4dc"}}>
+      <style>{CSS}</style>
+      <header style={{borderBottom:"1px solid #1e1e1e",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          <div style={{padding:"14px 0",display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:26,height:26,background:"#f0c040",borderRadius:3,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#0f0f0f"}}>S</span>
+            </div>
+            <div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:13,letterSpacing:".1em"}}>STOCKFLOW</div>
+              <div style={{fontSize:10,color:"#555"}}>Marmottan TP</div>
+            </div>
+          </div>
+          <nav style={{display:"flex",flexWrap:"wrap"}}>
+            {["dashboard","inventaire","mouvements","lieux","categories"].map(v=>(
+              <button key={v} className={"nb"+(view===v?" a":"")} onClick={()=>setView(v)}>
+                {v.charAt(0).toUpperCase()+v.slice(1)}
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",flexWrap:"wrap"}}>
+          {syncing
+            ?<span className="syncing" style={{fontSize:11,color:"#f0a040"}}>Sauvegarde...</span>
+            :lastSync&&<span style={{fontSize:11,color:"#4caf7c"}}>Sync. {lastSync.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}</span>
+          }
+          <span style={{fontSize:11,color:"#555",padding:"0 4px",borderLeft:"1px solid #252525",marginLeft:4}}>{userName}</span>
+          <button className="bg" onClick={exportCSV}>CSV</button>
+          <button className="bg" onClick={exportJSON}>JSON</button>
+          <label className="bg" style={{cursor:"pointer"}}>Importer<input type="file" accept=".json" style={{display:"none"}} onChange={importJSON}/></label>
+          <button className="bo" onClick={()=>{setForm({type:"transfert"});setModal("movement");}}>Transfert</button>
+          <button className="bo" onClick={()=>{setForm({type:"sortie"});setModal("movement");}}>- Sortie</button>
+          <button className="bp" onClick={()=>{setForm({type:"entree"});setModal("movement");}}>+ Entree</button>
+          <button className="bg" onClick={handleLogout} style={{color:"#e07060",marginLeft:4}}>Deconnexion</button>
+        </div>
+      </header>
+
+      <main style={{padding:"24px 28px",maxWidth:1280,margin:"0 auto"}} className="fi">
+
+        {view==="dashboard"&&(
+          <div>
+            <div style={{marginBottom:24}}>
+              <h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,marginBottom:3}}>Tableau de bord</h1>
+              <p style={{color:"#555",fontSize:13}}>{TODAY} — {locations.length} lieux — {products.length} references — Connecte en tant que {userName}</p>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+              {[{label:"References",value:products.length,sub:"produits",c:"y"},{label:"Valeur totale",value:totalVal.toLocaleString("fr-FR")+" EUR",sub:"en stock",c:"g"},{label:"Alertes",value:lowStock.length,sub:"sous le seuil",c:"r"},{label:"Mouvements",value:todayMov.length,sub:"aujourd'hui",c:"b"}].map(s=>(
+                <div key={s.label} className={"sc "+s.c}>
+                  <div style={{fontSize:10,color:"#555",letterSpacing:".1em",textTransform:"uppercase",marginBottom:8}}>{s.label}</div>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:26,fontWeight:700,marginBottom:4}}>{s.value}</div>
+                  <div style={{fontSize:12,color:"#555"}}>{s.sub}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{marginBottom:20}}>
+              <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,marginBottom:12}}>Repartition par lieu</h2>
+              <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(locations.length,3)+",1fr)",gap:10}}>
+                {locations.map(loc=>{
+                  const val=products.reduce((a,p)=>a+getLS2(p.id,loc.id)*p.unitPrice,0);
+                  const items=products.reduce((a,p)=>a+getLS2(p.id,loc.id),0);
+                  return(<div key={loc.id} className="card" style={{padding:16,borderLeft:"3px solid "+loc.color}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                      <div><div style={{fontWeight:500,fontSize:14}}>{loc.name}</div><div style={{fontSize:11,color:"#555",marginTop:2}}>{loc.code}</div></div>
+                      <span style={{background:loc.color+"15",border:"1px solid "+loc.color+"30",color:loc.color,fontSize:11,padding:"2px 7px",borderRadius:2,height:"fit-content"}}>{items} art.</span>
+                    </div>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:18}}>{val.toLocaleString("fr-FR")} EUR</div>
+                  </div>);
+                })}
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
+              <div className="card" style={{padding:20}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14}}>Alertes de stock</h2>
+                  {lowStock.length>0&&<span className="blow">{lowStock.length} alerte{lowStock.length>1?"s":""}</span>}
+                </div>
+                {lowStock.length===0?<p style={{color:"#555",fontSize:13,textAlign:"center",padding:"16px 0"}}>Tous les stocks sont suffisants</p>
+                :lowStock.map(p=>(<div key={p.id} style={{marginBottom:12,paddingBottom:12,borderBottom:"1px solid #1c1c1c"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><span style={{fontSize:13}}>{p.name}</span><span style={{color:"#e07060",fontWeight:500}}>{p.quantity}/{p.minStock}</span></div>
+                  <div className="pb"><div className="pf" style={{width:Math.min(100,(p.quantity/p.minStock)*100)+"%",background:p.quantity===0?"#e07060":"#f0a040"}}/></div>
+                </div>))}
+              </div>
+              <div className="card" style={{padding:20}}>
+                <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,marginBottom:16}}>Derniers mouvements</h2>
+                {[...movements].reverse().slice(0,5).map(m=>(
+                  <div key={m.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingBottom:10,borderBottom:"1px solid #181818"}}>
+                    <span className={tC(m.type)}>{tL(m.type)}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13}}>{getPN(m.productId)}</div>
+                      <div style={{fontSize:11,color:"#555"}}>{getLN(m.locationId)}{m.toLocationId?" > "+getLN(m.toLocationId):""} — {m.user.split("@")[0]}</div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,color:m.type==="entree"?"#4caf7c":m.type==="transfert"?"#6090e0":"#e07060"}}>{m.type==="entree"?"+":m.type==="transfert"?">>":"-"}{m.quantity}</div>
+                      <div style={{fontSize:11,color:"#555"}}>{m.date}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view==="inventaire"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+              <div><h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,marginBottom:3}}>Inventaire</h1><p style={{color:"#555",fontSize:13}}>{fil.length} references</p></div>
+              <div style={{display:"flex",gap:8}}><button className="bg" onClick={exportCSV}>Export CSV</button><button className="bp" onClick={()=>{setForm({});setModal("add-product");}}>+ Nouveau produit</button></div>
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+              {["Tous",...categories].map(c=>(<span key={c} className={"cat-chip"+(filterCat===c?" active":"")} onClick={()=>setFilterCat(c)}>{c}</span>))}
+            </div>
+            <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+              <input className="if" placeholder="Rechercher..." value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:180}}/>
+              <select className="if" value={filterLoc} onChange={e=>setFilterLoc(e.target.value)} style={{width:175}}>
+                <option value="Tous">Tous les lieux</option>
+                {locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+              <select className="if" value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{width:140}}>
+                <option value="name">Nom</option><option value="quantity">Quantite</option><option value="price">Prix</option>
+              </select>
+            </div>
+            <div className="card">
+              <table>
+                <thead><tr><th>Produit</th><th>SKU</th><th>Cat.</th><th>Lieux</th><th>Total</th><th>P.U.</th><th>Valeur</th><th>Statut</th><th></th></tr></thead>
+                <tbody>
+                  {fil.map(p=>{
+                    const r2=p.quantity/p.minStock;
+                    const st=p.quantity===0?"rupture":r2<=1?"critique":r2<=1.5?"bas":"ok";
+                    return(<tr key={p.id} style={{cursor:"pointer"}} onClick={()=>setModal({type:"product-detail",data:p})}>
+                      <td style={{fontWeight:500}}>{p.name}</td>
+                      <td style={{color:"#555",fontSize:12}}>{p.sku}</td>
+                      <td style={{color:"#777",fontSize:12}}>{p.category}</td>
+                      <td><div style={{display:"flex",flexWrap:"wrap",gap:2}}>
+                        {locations.map(l=>{const q=getLS2(p.id,l.id);if(!q)return null;return <span key={l.id} className="lp" style={{background:l.color+"18",border:"1px solid "+l.color+"35",color:l.color}}>{l.code} <b>{q}</b></span>;})}
+                        {locations.every(l=>!getLS2(p.id,l.id))&&<span style={{color:"#444",fontSize:11}}>--</span>}
+                      </div></td>
+                      <td><span style={{fontFamily:"'Syne',sans-serif",fontWeight:600}}>{p.quantity}</span> <span style={{color:"#555",fontSize:11}}>{p.unit}</span></td>
+                      <td style={{color:"#888",fontSize:12}}>{p.unitPrice.toLocaleString("fr-FR")} EUR</td>
+                      <td style={{fontFamily:"'Syne',sans-serif",fontWeight:500}}>{(p.quantity*p.unitPrice).toLocaleString("fr-FR")} EUR</td>
+                      <td><span className={st==="ok"?"bok":st==="bas"?"bwn":"blow"}>{st==="ok"?"OK":st==="bas"?"Bas":st==="critique"?"Critique":"Rupture"}</span></td>
+                      <td onClick={e=>e.stopPropagation()}><div style={{display:"flex",gap:2}}>
+                        <button className="rb" onClick={()=>{setForm({type:"entree",productId:String(p.id)});setModal("movement");}}>+</button>
+                        <button className="rb" onClick={()=>{setForm({type:"sortie",productId:String(p.id)});setModal("movement");}}>-</button>
+                        <button className="rb" onClick={()=>{setForm({type:"transfert",productId:String(p.id)});setModal("movement");}}>~</button>
+                      </div></td>
+                    </tr>);
+                  })}
+                </tbody>
+              </table>
+              {fil.length===0&&<p style={{textAlign:"center",color:"#444",padding:"32px",fontSize:13}}>Aucun produit trouve.</p>}
+            </div>
+          </div>
+        )}
+
+        {view==="mouvements"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+              <div><h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,marginBottom:3}}>Mouvements</h1><p style={{color:"#555",fontSize:13}}>{movements.length} operations</p></div>
+              <div style={{display:"flex",gap:8}}>
+                <button className="bg" onClick={exportMouv}>Export CSV</button>
+                <button className="bo" onClick={()=>{setForm({type:"sortie"});setModal("movement");}}>- Sortie</button>
+                <button className="bo" onClick={()=>{setForm({type:"transfert"});setModal("movement");}}>Transfert</button>
+                <button className="bp" onClick={()=>{setForm({type:"entree"});setModal("movement");}}>+ Entree</button>
+              </div>
+            </div>
+            <div className="card">
+              <table>
+                <thead><tr><th>Date</th><th>Type</th><th>Produit</th><th>Lieu</th><th>Qte</th><th>Ref</th><th>Motif</th><th>Operateur</th></tr></thead>
+                <tbody>
+                  {[...movements].reverse().map(m=>(<tr key={m.id}>
+                    <td style={{color:"#666",fontSize:12}}>{m.date}</td>
+                    <td><span className={tC(m.type)}>{tL(m.type)}</span></td>
+                    <td style={{fontWeight:500}}>{getPN(m.productId)}</td>
+                    <td><div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:getLC(m.locationId),display:"inline-block",flexShrink:0}}/>
+                      <span style={{fontSize:12,color:"#aaa"}}>{getLN(m.locationId)}</span>
+                      {m.toLocationId&&<><span style={{color:"#444"}}>&gt;</span><span style={{width:6,height:6,borderRadius:"50%",background:getLC(m.toLocationId),display:"inline-block"}}/><span style={{fontSize:12,color:"#aaa"}}>{getLN(m.toLocationId)}</span></>}
+                    </div></td>
+                    <td><span style={{fontFamily:"'Syne',sans-serif",fontWeight:600,color:m.type==="entree"?"#4caf7c":m.type==="transfert"?"#6090e0":"#e07060"}}>{m.type==="entree"?"+":m.type==="transfert"?">>":"-"}{m.quantity}</span></td>
+                    <td style={{color:"#666",fontSize:12}}>{m.ref}</td>
+                    <td style={{color:"#999",fontSize:12}}>{m.reason}</td>
+                    <td style={{color:"#555",fontSize:12}}>{m.user.split("@")[0]}</td>
+                  </tr>))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {view==="lieux"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+              <div><h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,marginBottom:3}}>Lieux de stockage</h1><p style={{color:"#555",fontSize:13}}>{locations.length} emplacements</p></div>
+              <button className="bp" onClick={()=>{setForm({color:LOC_COLORS[locations.length%LOC_COLORS.length]});setModal("add-location");}}>+ Nouveau lieu</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(locations.length,3)+",1fr)",gap:14}}>
+              {locations.map(loc=>{
+                const lP=products.filter(p=>getLS2(p.id,loc.id)>0);
+                const lV=lP.reduce((a,p)=>a+getLS2(p.id,loc.id)*p.unitPrice,0);
+                const lI=lP.reduce((a,p)=>a+getLS2(p.id,loc.id),0);
+                return(<div key={loc.id} className="card" style={{padding:20,borderTop:"3px solid "+loc.color}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                    <div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15}}>{loc.name}</div><div style={{fontSize:11,color:"#555",marginTop:2}}>{loc.code}</div></div>
+                    <button className="bsm" onClick={()=>delLoc(loc.id)}>Suppr.</button>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                    <div style={{background:"#141414",padding:10,borderRadius:2}}><div style={{fontSize:10,color:"#555",textTransform:"uppercase"}}>Articles</div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:17,marginTop:3}}>{lI}</div></div>
+                    <div style={{background:"#141414",padding:10,borderRadius:2}}><div style={{fontSize:10,color:"#555",textTransform:"uppercase"}}>Valeur</div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:17,marginTop:3}}>{lV.toLocaleString("fr-FR")} EUR</div></div>
+                  </div>
+                  {lP.map(p=>(<div key={p.id} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #181818",fontSize:12}}><span style={{color:"#bbb"}}>{p.name}</span><span style={{color:loc.color,fontWeight:500}}>{getLS2(p.id,loc.id)} {p.unit}</span></div>))}
+                  {lP.length===0&&<p style={{color:"#444",fontSize:12}}>Aucun produit</p>}
+                </div>);
+              })}
+            </div>
+          </div>
+        )}
+
+        {view==="categories"&&(
+          <div>
+            <div style={{marginBottom:20}}><h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,marginBottom:3}}>Categories</h1><p style={{color:"#555",fontSize:13}}>{categories.length} categories</p></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:22}}>
+              <div className="card" style={{overflow:"hidden"}}>
+                <div style={{padding:"13px 16px",borderBottom:"1px solid #1e1e1e",display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:12,color:"#666",textTransform:"uppercase",letterSpacing:".08em"}}>Categories existantes</span>
+                  <span style={{fontSize:11,color:"#555"}}>{categories.length} entrees</span>
+                </div>
+                {categories.map((cat,i)=>{
+                  const count=products.filter(p=>p.category===cat).length;
+                  const isR=catRen[i]!==undefined;
+                  return(<div key={cat} className="cat-row">
+                    <div style={{flex:1}}>
+                      {isR?(<input className="if" style={{padding:"6px 10px",fontSize:13}} value={catRen[i]} autoFocus onChange={e=>setCatRen({[i]:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")renameCat(cat,catRen[i]);if(e.key==="Escape")setCatRen({});}}/>)
+                      :(<div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:13,fontWeight:500}}>{cat}</span><span style={{fontSize:11,color:"#555",background:"#222",padding:"1px 7px",borderRadius:2}}>{count} produit{count!==1?"s":""}</span></div>)}
+                    </div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      {isR?(<><button className="bsm" style={{color:"#4caf7c"}} onClick={()=>renameCat(cat,catRen[i])}>OK</button><button className="bsm" onClick={()=>setCatRen({})}>Ann.</button></>)
+                      :(<><button className="bsm" onClick={()=>setCatRen({[i]:cat})}>Renommer</button><button className="bsm" style={{color:"#e05050"}} onClick={()=>delCat(cat)}>Suppr.</button></>)}
+                    </div>
+                  </div>);
+                })}
+                {categories.length===0&&<p style={{color:"#555",fontSize:13,padding:"20px",textAlign:"center"}}>Aucune categorie.</p>}
+              </div>
+              <div>
+                <div className="card" style={{padding:22,marginBottom:14}}>
+                  <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,marginBottom:14}}>+ Nouvelle categorie</h2>
+                  <div style={{display:"flex",gap:10}}><input className="if" placeholder="Ex: Informatique, Outils..." value={catEdit} onChange={e=>setCatEdit(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCat()} style={{flex:1}}/><button className="bp" onClick={addCat}>Ajouter</button></div>
+                </div>
+                <div className="card" style={{padding:22}}>
+                  <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,marginBottom:14}}>Repartition</h2>
+                  {categories.map(cat=>{
+                    const prods=products.filter(p=>p.category===cat);
+                    const val=enr.filter(p=>p.category===cat).reduce((a,p)=>a+p.quantity*p.unitPrice,0);
+                    const pct=products.length>0?(prods.length/products.length)*100:0;
+                    return(<div key={cat} style={{marginBottom:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:13}}><span>{cat}</span><span style={{color:"#888",fontSize:12}}>{prods.length} prod. — {val.toLocaleString("fr-FR")} EUR</span></div>
+                      <div className="pb"><div className="pf" style={{width:pct+"%",background:"#f0c040"}}/></div>
+                    </div>);
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {modal==="movement"&&(
+        <div className="ov" onClick={()=>{setModal(null);setForm({});}}>
+          <div className="mb" onClick={e=>e.stopPropagation()}>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,marginBottom:16}}>{form.type==="entree"?"+ Entree":form.type==="sortie"?"- Sortie":">> Transfert"}</h2>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              {["entree","sortie","transfert"].map(t=>(<button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"8px",border:"1px solid "+(form.type===t?"#f0c040":"#252525"),background:form.type===t?"#252010":"#141414",color:form.type===t?"#f0c040":"#666",cursor:"pointer",borderRadius:2,fontFamily:"'DM Mono',monospace",fontSize:12}}>{t==="entree"?"+ Entree":t==="sortie"?"- Sortie":">> Transfert"}</button>))}
+            </div>
+            <div style={{marginBottom:13}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Produit *</label>
+              <select className="if" value={form.productId||""} onChange={e=>setForm(f=>({...f,productId:e.target.value}))}>
+                <option value="">-- Choisir --</option>
+                {products.map(p=><option key={p.id} value={p.id}>{p.name} (stock: {getTS(p.id)})</option>)}
+              </select>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:form.type==="transfert"?"1fr 1fr":"1fr",gap:13,marginBottom:13}}>
+              <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{form.type==="transfert"?"Lieu source *":"Lieu *"}</label>
+                <select className="if" value={form.locationId||""} onChange={e=>setForm(f=>({...f,locationId:e.target.value}))}>
+                  <option value="">-- Choisir --</option>
+                  {locations.map(l=>{const q=form.productId?getLS2(parseInt(form.productId),l.id):null;return <option key={l.id} value={l.id}>{l.name}{q!==null?" ("+q+")":""}</option>;})}
+                </select>
+              </div>
+              {form.type==="transfert"&&(<div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Lieu destination *</label>
+                <select className="if" value={form.toLocationId||""} onChange={e=>setForm(f=>({...f,toLocationId:e.target.value}))}>
+                  <option value="">-- Choisir --</option>
+                  {locations.filter(l=>l.id!==parseInt(form.locationId)).map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+                </select>
+              </div>)}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13,marginBottom:13}}>
+              <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Quantite *</label><input className="if" type="number" min="1" placeholder="0" value={form.quantity||""} onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
+              <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Reference</label><input className="if" placeholder="Optionnel" value={form.ref||""} onChange={e=>setForm(f=>({...f,ref:e.target.value}))}/></div>
+            </div>
+            <div style={{marginBottom:13}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Motif *</label><input className="if" placeholder="Ex: Commande fournisseur..." value={form.reason||""} onChange={e=>setForm(f=>({...f,reason:e.target.value}))}/></div>
+            <div style={{display:"flex",gap:10,marginTop:20}}><button className="bo" style={{flex:1}} onClick={()=>{setModal(null);setForm({});}}>Annuler</button><button className="bp" style={{flex:2}} onClick={handleMov}>Confirmer</button></div>
+          </div>
+        </div>
+      )}
+
+      {modal==="add-product"&&(
+        <div className="ov" onClick={()=>{setModal(null);setForm({});}}>
+          <div className="mb" onClick={e=>e.stopPropagation()}>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,marginBottom:20}}>+ Nouveau produit</h2>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+              {[{label:"Nom *",field:"name",full:true,placeholder:"Nom du produit"},{label:"SKU *",field:"sku",placeholder:"PROD-001"},{label:"Stock min.",field:"minStock",type:"number",placeholder:"5"},{label:"Prix (EUR)",field:"unitPrice",type:"number",placeholder:"0.00"},{label:"Unite",field:"unit",placeholder:"unite, kg..."}].map(f=>(<div key={f.field} style={{gridColumn:f.full?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{f.label}</label><input className="if" type={f.type||"text"} placeholder={f.placeholder} value={form[f.field]||""} onChange={e=>setForm(ff=>({...ff,[f.field]:e.target.value}))}/></div>))}
+              <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Categorie *</label><select className="if" value={form.category||""} onChange={e=>setForm(ff=>({...ff,category:e.target.value}))}><option value="">-- Choisir --</option>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
+            </div>
+            <div style={{marginTop:14,padding:14,background:"#141414",borderRadius:2,border:"1px solid #252525"}}>
+              <div style={{fontSize:11,color:"#555",textTransform:"uppercase",marginBottom:10}}>Stock initial (optionnel)</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5}}>Lieu</label><select className="if" value={form.locationId||""} onChange={e=>setForm(f=>({...f,locationId:e.target.value}))}><option value="">-- Choisir --</option>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+                <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5}}>Quantite</label><input className="if" type="number" min="0" placeholder="0" value={form.initQty||""} onChange={e=>setForm(f=>({...f,initQty:e.target.value}))}/></div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:20}}><button className="bo" style={{flex:1}} onClick={()=>{setModal(null);setForm({});}}>Annuler</button><button className="bp" style={{flex:2}} onClick={handleAddProd}>Ajouter</button></div>
+          </div>
+        </div>
+      )}
+
+      {modal==="add-location"&&(
+        <div className="ov" onClick={()=>{setModal(null);setForm({});}}>
+          <div className="mb" onClick={e=>e.stopPropagation()} style={{width:400}}>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,marginBottom:20}}>+ Nouveau lieu</h2>
+            {[{label:"Nom *",field:"name",placeholder:"Ex: Entrepot Nord"},{label:"Code *",field:"code",placeholder:"Ex: ENT-N"}].map(f=>(<div key={f.field} style={{marginBottom:13}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{f.label}</label><input className="if" placeholder={f.placeholder} value={form[f.field]||""} onChange={e=>setForm(ff=>({...ff,[f.field]:e.target.value}))}/></div>))}
+            <div style={{marginBottom:13}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:8,textTransform:"uppercase",letterSpacing:".08em"}}>Couleur</label><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{LOC_COLORS.map(c=>(<button key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{width:28,height:28,borderRadius:"50%",background:c,border:form.color===c?"3px solid #e8e4dc":"2px solid transparent",cursor:"pointer"}}/>))}</div></div>
+            <div style={{display:"flex",gap:10,marginTop:20}}><button className="bo" style={{flex:1}} onClick={()=>{setModal(null);setForm({});}}>Annuler</button><button className="bp" style={{flex:2}} onClick={handleAddLoc}>Creer</button></div>
+          </div>
+        </div>
+      )}
+
+      {modal?.type==="product-detail"&&(()=>{
+        const p=modal.data;const pm=movements.filter(m=>m.productId===p.id);
+        return(<div className="ov" onClick={()=>setModal(null)}>
+          <div className="mb" onClick={e=>e.stopPropagation()} style={{width:560}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+              <div><h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18}}>{p.name}</h2><p style={{color:"#555",fontSize:12,marginTop:4}}>{p.sku} — {p.category}</p></div>
+              <span style={{fontFamily:"'Syne',sans-serif",fontSize:24,fontWeight:700,color:p.quantity<=p.minStock?"#e07060":"#4caf7c"}}>{p.quantity}</span>
+            </div>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,color:"#555",textTransform:"uppercase",marginBottom:10}}>Repartition par lieu</div>
+              {locations.map(l=>{const q=getLS2(p.id,l.id);const pct=p.quantity>0?(q/p.quantity)*100:0;return(<div key={l.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:l.color,flexShrink:0}}/><span style={{width:120,fontSize:12,color:"#bbb",flexShrink:0}}>{l.name}</span>
+                <div className="pb" style={{flex:1}}><div className="pf" style={{width:pct+"%",background:l.color}}/></div>
+                <span style={{width:55,textAlign:"right",fontFamily:"'Syne',sans-serif",fontWeight:500,fontSize:13,color:q>0?"#e8e4dc":"#444"}}>{q} {p.unit}</span>
+              </div>);})}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+              {[{label:"Prix unitaire",val:p.unitPrice.toLocaleString("fr-FR")+" EUR"},{label:"Valeur stock",val:(p.quantity*p.unitPrice).toLocaleString("fr-FR")+" EUR"},{label:"Stock min.",val:p.minStock+" "+p.unit}].map(s=>(<div key={s.label} style={{background:"#141414",padding:12,borderRadius:2,border:"1px solid #1e1e1e"}}><div style={{fontSize:10,color:"#444",textTransform:"uppercase",marginBottom:4}}>{s.label}</div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14}}>{s.val}</div></div>))}
+            </div>
+            <div style={{fontSize:11,color:"#555",textTransform:"uppercase",marginBottom:10}}>Historique</div>
+            {pm.length===0?<p style={{color:"#444",fontSize:12,padding:"8px 0"}}>Aucun mouvement.</p>:[...pm].reverse().slice(0,5).map(m=>(<div key={m.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #181818"}}>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}><span className={tC(m.type)}>{tL(m.type)}</span><div><div style={{fontSize:12}}>{m.reason}</div><div style={{fontSize:11,color:"#444"}}>{getLN(m.locationId)}{m.toLocationId?" > "+getLN(m.toLocationId):""} — {m.user.split("@")[0]}</div></div></div>
+              <div style={{textAlign:"right"}}><div style={{color:m.type==="entree"?"#4caf7c":m.type==="transfert"?"#6090e0":"#e07060",fontWeight:600}}>{m.type==="entree"?"+":m.type==="transfert"?">>":"-"}{m.quantity}</div><div style={{fontSize:11,color:"#444"}}>{m.date}</div></div>
+            </div>))}
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button className="bd" onClick={()=>delProd(p.id)}>Supprimer</button>
+              <button className="bo" onClick={()=>{setModal(null);setTimeout(()=>{setForm({type:"transfert",productId:String(p.id)});setModal("movement");},80);}}>Transfert</button>
+              <button className="bo" onClick={()=>{setModal(null);setTimeout(()=>{setForm({type:"sortie",productId:String(p.id)});setModal("movement");},80);}}>- Sortie</button>
+              <button className="bp" style={{flex:1}} onClick={()=>{setModal(null);setTimeout(()=>{setForm({type:"entree",productId:String(p.id)});setModal("movement");},80);}}>+ Entree</button>
+            </div>
+          </div>
+        </div>);
+      })()}
+
+      {toast&&<div className={"toast "+toast.type}>{toast.type==="success"?"OK":"ERR"} — {toast.msg}</div>}
+    </div>
+  );
+}
+
+// ── ROOT ───────────────────────────────────────────────────────────────────
+function App(){
+  const [user,setUser] = useState(null);
+  const [checking,setChecking] = useState(true);
+
+  useEffect(()=>{
+    const init=async()=>{
+      if(!window._fbReady)await new Promise(r=>window.addEventListener("fb-ready",r,{once:true}));
+      window._fa.onAuthStateChanged(window._auth, u=>{
+        setUser(u?u.email:null);
+        setChecking(false);
+      });
+    };
+    init();
+  },[]);
+
+  if(checking)return(
+    <div style={{minHeight:"100vh",background:"#0f0f0f",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <style>{CSS}</style>
+      <div style={{width:32,height:32,border:"2px solid #333",borderTop:"2px solid #f0c040",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+      <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
+    </div>
+  );
+  if(!user)return <LoginScreen onLogin={setUser}/>;
+  return <StockApp user={user} onLogout={()=>setUser(null)}/>;
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
