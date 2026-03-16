@@ -700,11 +700,19 @@ function StockApp({user, onLogout}){
             <div style={{display:"flex",gap:8,marginBottom:16}}>
               {["entree","sortie","transfert"].map(t=>(<button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"8px",border:"1px solid "+(form.type===t?"#f0c040":"#252525"),background:form.type===t?"#252010":"#141414",color:form.type===t?"#f0c040":"#666",cursor:"pointer",borderRadius:2,fontFamily:"'DM Mono',monospace",fontSize:12}}>{t==="entree"?"+ Entree":t==="sortie"?"- Sortie":">> Transfert"}</button>))}
             </div>
-            <div style={{marginBottom:13}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Produit *</label>
-              <select className="if" value={form.productId||""} onChange={e=>setForm(f=>({...f,productId:e.target.value}))}>
-                <option value="">-- Choisir --</option>
-                {products.map(p=><option key={p.id} value={p.id}>{p.name} (stock: {getTS(p.id)})</option>)}
-              </select>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13,marginBottom:13}}>
+              <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Categorie</label>
+                <select className="if" value={form.filterCatMov||""} onChange={e=>setForm(f=>({...f,filterCatMov:e.target.value,productId:""}))}>
+                  <option value="">-- Toutes --</option>
+                  {categories.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Produit *</label>
+                <select className="if" value={form.productId||""} onChange={e=>setForm(f=>({...f,productId:e.target.value}))}>
+                  <option value="">-- Choisir --</option>
+                  {products.filter(p=>!form.filterCatMov||p.category===form.filterCatMov).map(p=><option key={p.id} value={p.id}>{p.name} (stock: {getTS(p.id)})</option>)}
+                </select>
+              </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:form.type==="transfert"?"1fr 1fr":"1fr",gap:13,marginBottom:13}}>
               <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{form.type==="transfert"?"Lieu source *":"Lieu *"}</label>
@@ -887,4 +895,3 @@ root.render(<App/>);
 </script>
 </body>
 </html>
-
