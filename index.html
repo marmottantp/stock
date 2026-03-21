@@ -49,16 +49,20 @@ const DEF_LOCS = [
 ];
 const DEF_LS = {"1_1":30,"1_2":8,"1_3":4,"2_1":5,"2_3":3,"3_1":80,"3_2":40,"4_2":3,"4_3":2,"5_1":1,"5_2":2,"6_1":24};
 const DEF_PRODS = [
-  {id:1,name:"Ecrans 27 pouces",sku:"ECR-27-4K",category:"Electronique",minStock:10,unitPrice:349,unit:"unite"},
-  {id:2,name:"Clavier mecanique",sku:"CLV-MEC-01",category:"Peripheriques",minStock:15,unitPrice:89,unit:"unite"},
-  {id:3,name:"Cable HDMI 2m",sku:"CAB-HDM-2M",category:"Cablage",minStock:30,unitPrice:12,unit:"unite"},
-  {id:4,name:"Papier A4",sku:"PAP-A4-500",category:"Fournitures",minStock:20,unitPrice:6.5,unit:"ramette"},
-  {id:5,name:"Chaise ergonomique",sku:"CHR-ERG-BLK",category:"Mobilier",minStock:5,unitPrice:450,unit:"unite"},
-  {id:6,name:"Cartouche encre noire",sku:"CRT-INK-BLK",category:"Fournitures",minStock:10,unitPrice:18,unit:"unite"},
+  {id:1,name:"Ecrans 27 pouces",sku:"ECR-27-4K",category:"Electronique",minStock:10,unit:"unite"},
+  {id:2,name:"Clavier mecanique",sku:"CLV-MEC-01",category:"Peripheriques",minStock:15,unit:"unite"},
+  {id:3,name:"Cable HDMI 2m",sku:"CAB-HDM-2M",category:"Cablage",minStock:30,unit:"unite"},
+  {id:4,name:"Papier A4",sku:"PAP-A4-500",category:"Fournitures",minStock:20,unit:"ramette"},
+  {id:5,name:"Chaise ergonomique",sku:"CHR-ERG-BLK",category:"Mobilier",minStock:5,unit:"unite"},
+  {id:6,name:"Cartouche encre noire",sku:"CRT-INK-BLK",category:"Fournitures",minStock:10,unit:"unite"},
 ];
 const DEF_MOVS = [
   {id:1,date:"2026-03-08",type:"entree",productId:1,locationId:1,quantity:20,reason:"Commande fournisseur",ref:"CMD-2026-021",user:"olivier@marmottantp.fr"},
   {id:2,date:"2026-03-09",type:"sortie",productId:2,locationId:3,quantity:3,reason:"Attribution poste",ref:"ATT-2026-012",user:"lionel@marmottantp.fr"},
+];
+const DEF_CHANTIERS = [
+  {id:1,name:"Chantier Mairie",adresse:"12 rue de la Paix, 73000 Chambery",statut:"en cours"},
+  {id:2,name:"Chantier Ecole",adresse:"5 avenue des Fleurs, 73100 Aix-les-Bains",statut:"termine"},
 ];
 const TODAY = new Date().toISOString().split("T")[0];
 const LOC_COLORS = ["#6090e0","#4caf7c","#f0a040","#e07080","#b080e0","#60c0d0","#e0c040"];
@@ -198,6 +202,7 @@ function StockApp({user, onLogout}){
   const [locations,setLocations]     = useState(DEF_LOCS);
   const [locationStock,setLS]        = useState(DEF_LS);
   const [categories,setCategories]   = useState(DEF_CATS);
+  const [chantiers,setChantiers]     = useState(saved?.chantiers||DEF_CHANTIERS);
   const [dbReady,setDbReady]         = useState(false);
   const [syncing,setSyncing]         = useState(false);
   const [lastSync,setLastSync]       = useState(null);
@@ -211,7 +216,7 @@ function StockApp({user, onLogout}){
   const [toast,setToast]             = useState(null);
   const [catEdit,setCatEdit]         = useState("");
   const [catRen,setCatRen]           = useState({});
-  const nP=useRef(1000),nM=useRef(1000),nL=useRef(1000);
+  const nP=useRef(1000),nM=useRef(1000),nL=useRef(1000),nC=useRef(3);
   const saveT=useRef(null);
   const userName = user.split("@")[0].charAt(0).toUpperCase()+user.split("@")[0].slice(1);
 
@@ -240,6 +245,7 @@ function StockApp({user, onLogout}){
             if(d.locations){setLocations(d.locations);nL.current=Math.max(nL.current,...d.locations.map(x=>x.id))+1;}
             if(d.locationStock)setLS(d.locationStock);
             if(d.categories)setCategories(d.categories);
+            if(d.chantiers){setChantiers(d.chantiers);nC.current=Math.max(nC.current,...d.chantiers.map(x=>x.id))+1;}
             setLastSync(new Date());
           }
         });
@@ -262,9 +268,9 @@ function StockApp({user, onLogout}){
     },600);
   },[]);
 
-  const saveAll=(p,m,l,ls,c)=>save({
+  const saveAll=(p,m,l,ls,c,ch)=>save({
     products:p||products,movements:m||movements,locations:l||locations,
-    locationStock:ls||locationStock,categories:c||categories
+    locationStock:ls||locationStock,categories:c||categories,chantiers:ch||chantiers
   });
 
   const getTS=pid=>Object.entries(locationStock).filter(([k])=>k.startsWith(pid+"_")).reduce((s,[,v])=>s+v,0);
@@ -278,10 +284,20 @@ function StockApp({user, onLogout}){
     .filter(p=>filterCat==="Tous"||p.category===filterCat)
     .filter(p=>filterLoc==="Tous"||getLS2(p.id,parseInt(filterLoc))>0)
     .filter(p=>p.name.toLowerCase().includes(search.toLowerCase())||p.sku.toLowerCase().includes(search.toLowerCase()))
-    .sort((a,b)=>sortBy==="name"?a.name.localeCompare(b.name):sortBy==="quantity"?b.quantity-a.quantity:b.unitPrice-a.unitPrice);
+    .sort((a,b)=>{
+      if(sortBy==="name") return a.name.localeCompare(b.name);
+      if(sortBy==="nameDesc") return b.name.localeCompare(a.name);
+      if(sortBy==="quantity") return b.quantity-a.quantity;
+      if(sortBy==="quantityAsc") return a.quantity-b.quantity;
+      if(sortBy==="category") return a.category.localeCompare(b.category);
+      if(sortBy==="status"){
+        const score=p=>{const r=p.quantity/p.minStock;return p.quantity===0?0:r<=1?1:r<=1.5?2:3;};
+        return score(a)-score(b);
+      }
+      return 0;
+    });
 
   const lowStock=enr.filter(p=>p.quantity<=p.minStock);
-  const totalVal=enr.reduce((a,p)=>a+p.quantity*p.unitPrice,0);
   const todayMov=movements.filter(m=>m.date===TODAY);
 
   const addCat=()=>{
@@ -307,6 +323,25 @@ function StockApp({user, onLogout}){
     saveAll(null,null,null,null,nc);showToast("Supprimee");
   };
 
+  const getChantierName=id=>chantiers.find(ch=>ch.id===id)?.name||"--";
+
+  const handleAddChantier=()=>{
+    if(!form.chName)return showToast("Entrez un nom de chantier","error");
+    const nc=[...chantiers,{id:nC.current++,name:form.chName,adresse:form.chAdresse||"",statut:"en cours"}];
+    setChantiers(nc);saveAll(null,null,null,null,null,nc);
+    showToast("Chantier ajoute !");setModal(null);setForm({});
+  };
+  const deleteChantier=id=>{
+    setChantiers(prev=>prev.filter(ch=>ch.id!==id));
+    saveAll(null,null,null,null,null,chantiers.filter(ch=>ch.id!==id));
+    showToast("Chantier supprime");
+  };
+  const closeChantier=id=>{
+    const nc=chantiers.map(ch=>ch.id===id?{...ch,statut:"termine"}:ch);
+    setChantiers(nc);saveAll(null,null,null,null,null,nc);
+    showToast("Chantier cloture");
+  };
+
   const handleMov=()=>{
     const{type,productId,locationId,toLocationId,quantity,reason,ref}=form;
     if(!productId||!locationId||!quantity||!reason)return showToast("Champs obligatoires manquants","error");
@@ -320,7 +355,7 @@ function StockApp({user, onLogout}){
     if(type==="sortie")nls[k]=(nls[k]||0)-qty;
     if(type==="transfert"){nls[k]=(nls[k]||0)-qty;nls[tk]=(nls[tk]||0)+qty;}
     Object.keys(nls).forEach(k2=>{if(nls[k2]<=0)delete nls[k2];});
-    const nm=[...movements,{id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId,quantity:qty,reason,ref:ref||(type.slice(0,3).toUpperCase()+"-"+String(nM.current).padStart(3,"0")),user}];
+    const nm=[...movements,{id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId,quantity:qty,reason,ref:ref||(type.slice(0,3).toUpperCase()+"-"+String(nM.current).padStart(3,"0")),user,chantierId:form.chantierId?parseInt(form.chantierId):null}];
     setLS(nls);setMovements(nm);
     saveAll(null,nm,null,nls,null);
     showToast("Mouvement enregistre !");setModal(null);setForm({});
@@ -329,7 +364,7 @@ function StockApp({user, onLogout}){
   const handleAddProd=()=>{
     if(!form.name||!form.sku||!form.category)return showToast("Champs obligatoires manquants","error");
     const newId=Date.now();
-    const np={id:newId,name:form.name,sku:form.sku,category:form.category,minStock:parseInt(form.minStock)||5,unitPrice:parseFloat(form.unitPrice)||0,unit:form.unit||"unite"};
+    const np={id:newId,name:form.name,sku:form.sku,category:form.category,minStock:parseInt(form.minStock)||5,unit:form.unit||"unite"};
     const nprods=[...products,np];
     let nls={...locationStock},nm=[...movements];
     if(form.locationId&&form.initQty&&parseInt(form.initQty)>0){
@@ -378,8 +413,8 @@ function StockApp({user, onLogout}){
     showToast("Export JSON OK !");
   };
   const exportCSV=()=>{
-    const rows=[["Produit","SKU","Categorie","Lieu","Qte","P.U.","Valeur"]];
-    products.forEach(p=>locations.forEach(l=>{const q=getLS2(p.id,l.id);if(q>0)rows.push([p.name,p.sku,p.category,l.name,q,p.unitPrice,(q*p.unitPrice).toFixed(2)]);}));
+    const rows=[["Produit","SKU","Categorie","Lieu","Qte"]];
+    products.forEach(p=>locations.forEach(l=>{const q=getLS2(p.id,l.id);if(q>0)rows.push([p.name,p.sku,p.category,l.name,q]);}));
     const b=new Blob(["﻿"+rows.map(r=>r.map(c=>'"'+c+'"').join(";")).join("\n")],{type:"text/csv;charset=utf-8;"});
     const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="inventaire_"+TODAY+".csv";a.click();
     showToast("Export CSV OK !");
@@ -442,7 +477,7 @@ function StockApp({user, onLogout}){
             </div>
           </div>
           <nav style={{display:"flex",flexWrap:"wrap"}}>
-            {["dashboard","inventaire","mouvements","lieux","categories"].map(v=>(
+            {["dashboard","inventaire","mouvements","lieux","categories","chantiers"].map(v=>(
               <button key={v} className={"nb"+(view===v?" a":"")} onClick={()=>setView(v)}>
                 {v.charAt(0).toUpperCase()+v.slice(1)}
               </button>
@@ -473,8 +508,8 @@ function StockApp({user, onLogout}){
               <h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,marginBottom:3,color:"#1a1a1a"}}>Tableau de bord</h1>
               <p style={{color:"#888",fontSize:13}}>{TODAY} — {locations.length} lieux — {products.length} references — Connecte en tant que {userName}</p>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
-              {[{label:"References",value:products.length,sub:"produits",c:"y"},{label:"Valeur totale",value:totalVal.toLocaleString("fr-FR")+" EUR",sub:"en stock",c:"g"},{label:"Alertes",value:lowStock.length,sub:"sous le seuil",c:"r"},{label:"Mouvements",value:todayMov.length,sub:"aujourd'hui",c:"b"}].map(s=>(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:24}}>
+              {[{label:"References",value:products.length,sub:"produits",c:"y"},{label:"Alertes",value:lowStock.length,sub:"sous le seuil",c:"r"},{label:"Mouvements",value:todayMov.length,sub:"aujourd'hui",c:"b"}].map(s=>(
                 <div key={s.label} className={"sc "+s.c}>
                   <div style={{fontSize:10,color:"#999",letterSpacing:".1em",textTransform:"uppercase",marginBottom:8}}>{s.label}</div>
                   <div style={{fontFamily:"'Syne',sans-serif",fontSize:26,fontWeight:700,marginBottom:4,color:"#1a1a1a"}}>{s.value}</div>
@@ -486,7 +521,6 @@ function StockApp({user, onLogout}){
               <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,marginBottom:12}}>Repartition par lieu</h2>
               <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(locations.length,3)+",1fr)",gap:10}}>
                 {locations.map(loc=>{
-                  const val=products.reduce((a,p)=>a+getLS2(p.id,loc.id)*p.unitPrice,0);
                   const items=products.reduce((a,p)=>a+getLS2(p.id,loc.id),0);
                   return(<div key={loc.id} className="card" style={{padding:16,borderLeft:"3px solid "+loc.color}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
@@ -506,7 +540,13 @@ function StockApp({user, onLogout}){
                 </div>
                 {lowStock.length===0?<p style={{color:"#555",fontSize:13,textAlign:"center",padding:"16px 0"}}>Tous les stocks sont suffisants</p>
                 :lowStock.map(p=>(<div key={p.id} style={{marginBottom:12,paddingBottom:12,borderBottom:"1px solid #1c1c1c"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}><span style={{fontSize:13}}>{p.name}</span><span style={{color:"#e07060",fontWeight:500}}>{p.quantity}/{p.minStock}</span></div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <div>
+                      <span style={{fontSize:13,fontWeight:500}}>{p.name}</span>
+                      <span style={{fontSize:11,background:"#e8f0fb",color:"#2E75B6",padding:"1px 7px",borderRadius:2,marginLeft:8}}>{p.category}</span>
+                    </div>
+                    <span style={{color:"#e07060",fontWeight:500}}>{p.quantity}/{p.minStock}</span>
+                  </div>
                   <div className="pb"><div className="pf" style={{width:Math.min(100,(p.quantity/p.minStock)*100)+"%",background:p.quantity===0?"#e07060":"#f0a040"}}/></div>
                 </div>))}
               </div>
@@ -546,12 +586,17 @@ function StockApp({user, onLogout}){
                 {locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
               <select className="if" value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{width:140}}>
-                <option value="name">Nom</option><option value="quantity">Quantite</option><option value="price">Prix</option>
+                <option value="name">Tri : Nom A-Z</option>
+                <option value="nameDesc">Tri : Nom Z-A</option>
+                <option value="quantity">Tri : Stock (haut)</option>
+                <option value="quantityAsc">Tri : Stock (bas)</option>
+                <option value="category">Tri : Categorie</option>
+                <option value="status">Tri : Statut alerte</option>
               </select>
             </div>
             <div className="card">
               <table>
-                <thead><tr><th>Produit</th><th>SKU</th><th>Cat.</th><th>Lieux</th><th>Total</th><th>P.U.</th><th>Valeur</th><th>Statut</th><th></th></tr></thead>
+                <thead><tr><th>Produit</th><th>SKU</th><th>Cat.</th><th>Lieux</th><th>Total</th><th>Statut</th><th></th></tr></thead>
                 <tbody>
                   {fil.map(p=>{
                     const r2=p.quantity/p.minStock;
@@ -565,8 +610,7 @@ function StockApp({user, onLogout}){
                         {locations.every(l=>!getLS2(p.id,l.id))&&<span style={{color:"#444",fontSize:11}}>--</span>}
                       </div></td>
                       <td><span style={{fontFamily:"'Syne',sans-serif",fontWeight:600}}>{p.quantity}</span> <span style={{color:"#555",fontSize:11}}>{p.unit}</span></td>
-                      <td style={{color:"#888",fontSize:12}}>{p.unitPrice.toLocaleString("fr-FR")} EUR</td>
-                      <td style={{fontFamily:"'Syne',sans-serif",fontWeight:500}}>{(p.quantity*p.unitPrice).toLocaleString("fr-FR")} EUR</td>
+                      
                       <td><span className={st==="ok"?"bok":st==="bas"?"bwn":"blow"}>{st==="ok"?"OK":st==="bas"?"Bas":st==="critique"?"Critique":"Rupture"}</span></td>
                       <td onClick={e=>e.stopPropagation()}><div style={{display:"flex",gap:2}}>
                         <button className="rb" onClick={()=>{setForm({type:"entree",productId:String(p.id)});setModal("movement");}}>+</button>
@@ -595,7 +639,7 @@ function StockApp({user, onLogout}){
             </div>
             <div className="card">
               <table>
-                <thead><tr><th>Date</th><th>Type</th><th>Produit</th><th>Lieu</th><th>Qte</th><th>Ref</th><th>Motif</th><th>Operateur</th></tr></thead>
+                <thead><tr><th>Date</th><th>Type</th><th>Produit</th><th>Lieu</th><th>Qte</th><th>Chantier</th><th>Ref</th><th>Motif</th><th>Operateur</th></tr></thead>
                 <tbody>
                   {[...movements].reverse().map(m=>(<tr key={m.id}>
                     <td style={{color:"#666",fontSize:12}}>{m.date}</td>
@@ -607,6 +651,7 @@ function StockApp({user, onLogout}){
                       {m.toLocationId&&<><span style={{color:"#444"}}>&gt;</span><span style={{width:6,height:6,borderRadius:"50%",background:getLC(m.toLocationId),display:"inline-block"}}/><span style={{fontSize:12,color:"#666"}}>{getLN(m.toLocationId)}</span></>}
                     </div></td>
                     <td><span style={{fontFamily:"'Syne',sans-serif",fontWeight:600,color:m.type==="entree"?"#4caf7c":m.type==="transfert"?"#6090e0":"#e07060"}}>{m.type==="entree"?"+":m.type==="transfert"?">>":"-"}{m.quantity}</span></td>
+                    <td style={{fontSize:12,color:"#2E75B6"}}>{m.chantierId?getChantierName(m.chantierId):"--"}</td>
                     <td style={{color:"#666",fontSize:12}}>{m.ref}</td>
                     <td style={{color:"#999",fontSize:12}}>{m.reason}</td>
                     <td style={{color:"#888",fontSize:12}}>{m.user.split("@")[0]}</td>
@@ -626,7 +671,6 @@ function StockApp({user, onLogout}){
             <div style={{display:"grid",gridTemplateColumns:"repeat("+Math.min(locations.length,3)+",1fr)",gap:14}}>
               {locations.map(loc=>{
                 const lP=products.filter(p=>getLS2(p.id,loc.id)>0);
-                const lV=lP.reduce((a,p)=>a+getLS2(p.id,loc.id)*p.unitPrice,0);
                 const lI=lP.reduce((a,p)=>a+getLS2(p.id,loc.id),0);
                 return(<div key={loc.id} className="card" style={{padding:20,borderTop:"3px solid "+loc.color}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
@@ -635,7 +679,7 @@ function StockApp({user, onLogout}){
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
                     <div style={{background:"#f8f8f6",padding:10,borderRadius:2}}><div style={{fontSize:10,color:"#555",textTransform:"uppercase"}}>Articles</div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:17,marginTop:3}}>{lI}</div></div>
-                    <div style={{background:"#f8f8f6",padding:10,borderRadius:2}}><div style={{fontSize:10,color:"#555",textTransform:"uppercase"}}>Valeur</div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:17,marginTop:3}}>{lV.toLocaleString("fr-FR")} EUR</div></div>
+                    
                   </div>
                   {lP.map(p=>(<div key={p.id} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #181818",fontSize:12}}><span style={{color:"#444"}}>{p.name}</span><span style={{color:loc.color,fontWeight:500}}>{getLS2(p.id,loc.id)} {p.unit}</span></div>))}
                   {lP.length===0&&<p style={{color:"#444",fontSize:12}}>Aucun produit</p>}
@@ -679,10 +723,10 @@ function StockApp({user, onLogout}){
                   <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,marginBottom:14}}>Repartition</h2>
                   {categories.map(cat=>{
                     const prods=products.filter(p=>p.category===cat);
-                    const val=enr.filter(p=>p.category===cat).reduce((a,p)=>a+p.quantity*p.unitPrice,0);
+  
                     const pct=products.length>0?(prods.length/products.length)*100:0;
                     return(<div key={cat} style={{marginBottom:12}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:13}}><span>{cat}</span><span style={{color:"#888",fontSize:12}}>{prods.length} prod. — {val.toLocaleString("fr-FR")} EUR</span></div>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:13}}><span>{cat}</span><span style={{color:"#888",fontSize:12}}>{prods.length} prod.</span></div>
                       <div className="pb"><div className="pf" style={{width:pct+"%",background:"#f0c040"}}/></div>
                     </div>);
                   })}
@@ -692,6 +736,87 @@ function StockApp({user, onLogout}){
           </div>
         )}
       </main>
+
+
+        {view==="chantiers"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+              <div>
+                <h1 style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:24,marginBottom:3,color:"#1a1a1a"}}>Chantiers</h1>
+                <p style={{color:"#888",fontSize:13}}>{chantiers.filter(ch=>ch.statut==="en cours").length} en cours — {chantiers.filter(ch=>ch.statut==="termine").length} termines</p>
+              </div>
+              <button className="bp" onClick={()=>{setForm({});setModal("add-chantier");}}>+ Nouveau chantier</button>
+            </div>
+
+            {/* Chantiers en cours */}
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,marginBottom:14,color:"#1a1a1a"}}>En cours</h2>
+            {chantiers.filter(ch=>ch.statut==="en cours").length===0&&<p style={{color:"#aaa",fontSize:13,marginBottom:20}}>Aucun chantier en cours.</p>}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14,marginBottom:28}}>
+              {chantiers.filter(ch=>ch.statut==="en cours").map(ch=>{
+                const sorties=movements.filter(m=>m.chantierId===ch.id&&m.type==="sortie");
+                const totalQte=sorties.reduce((a,m)=>a+m.quantity,0);
+                
+                return(
+                  <div key={ch.id} className="card" style={{padding:20,borderTop:"3px solid #2E75B6"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                      <div>
+                        <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:16,color:"#1a1a1a"}}>{ch.name}</div>
+                        <div style={{fontSize:12,color:"#888",marginTop:3}}>{ch.adresse||"Adresse non renseignee"}</div>
+                      </div>
+                      <span style={{background:"#e8f7ef",color:"#2d8a56",border:"1px solid #b8e0c8",fontSize:11,padding:"2px 8px",borderRadius:2}}>En cours</span>
+                    </div>
+
+                    <div style={{fontSize:12,color:"#888",marginBottom:14}}>{sorties.length} sortie{sorties.length!==1?"s":""} — {totalQte} articles consommes</div>
+                    {sorties.length>0&&(
+                      <div style={{marginBottom:14}}>
+                        <div style={{fontSize:11,color:"#aaa",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>Materiaux utilises</div>
+                        {Object.entries(sorties.reduce((acc,m)=>{const pn=getPN(m.productId);acc[pn]=(acc[pn]||0)+m.quantity;return acc;},{})).slice(0,4).map(([name,qty])=>(
+                          <div key={name} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderBottom:"1px solid #f0f0f0"}}>
+                            <span style={{color:"#555"}}>{name}</span>
+                            <span style={{fontWeight:500,color:"#1a1a1a"}}>{qty}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{display:"flex",gap:8}}>
+                      <button className="bo" style={{flex:1}} onClick={()=>{setForm({type:"sortie",chantierId:String(ch.id)});setModal("movement");}}>- Sortie sur ce chantier</button>
+                      <button className="bsm" style={{color:"#888"}} onClick={()=>closeChantier(ch.id)}>Cloturer</button>
+                      <button className="bsm" style={{color:"#e05050"}} onClick={()=>deleteChantier(ch.id)}>Suppr.</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Chantiers termines */}
+            {chantiers.filter(ch=>ch.statut==="termine").length>0&&(
+              <div>
+                <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,marginBottom:14,color:"#888"}}>Termines</h2>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
+                  {chantiers.filter(ch=>ch.statut==="termine").map(ch=>{
+                    const sorties=movements.filter(m=>m.chantierId===ch.id&&m.type==="sortie");
+                    return(
+                      <div key={ch.id} className="card" style={{padding:18,opacity:0.7}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                          <div>
+                            <div style={{fontWeight:600,fontSize:14,color:"#555"}}>{ch.name}</div>
+                            <div style={{fontSize:11,color:"#aaa",marginTop:2}}>{ch.adresse}</div>
+                          </div>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontSize:11,color:"#aaa"}}>{sorties.length} sorties</div>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",justifyContent:"flex-end"}}>
+                          <button className="bsm" style={{color:"#e05050"}} onClick={()=>deleteChantier(ch.id)}>Suppr.</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       {modal==="movement"&&(
         <div className="ov" onClick={()=>{setModal(null);setForm({});}}>
@@ -733,6 +858,15 @@ function StockApp({user, onLogout}){
               <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Reference</label><input className="if" placeholder="Optionnel" value={form.ref||""} onChange={e=>setForm(f=>({...f,ref:e.target.value}))}/></div>
             </div>
             <div style={{marginBottom:13}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Motif *</label><input className="if" placeholder="Ex: Commande fournisseur..." value={form.reason||""} onChange={e=>setForm(f=>({...f,reason:e.target.value}))}/></div>
+            {form.type==="sortie"&&(
+              <div style={{marginBottom:13}}>
+                <label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Chantier (optionnel)</label>
+                <select className="if" value={form.chantierId||""} onChange={e=>setForm(f=>({...f,chantierId:e.target.value}))}>
+                  <option value="">-- Aucun chantier --</option>
+                  {chantiers.filter(ch=>ch.statut==="en cours").map(ch=><option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                </select>
+              </div>
+            )}
             <div style={{display:"flex",gap:10,marginTop:20}}><button className="bo" style={{flex:1}} onClick={()=>{setModal(null);setForm({});}}>Annuler</button><button className="bp" style={{flex:2}} onClick={handleMov}>Confirmer</button></div>
           </div>
         </div>
@@ -743,7 +877,7 @@ function StockApp({user, onLogout}){
           <div className="mb" onClick={e=>e.stopPropagation()}>
             <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,marginBottom:20}}>+ Nouveau produit</h2>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-              {[{label:"Nom *",field:"name",full:true,placeholder:"Nom du produit"},{label:"SKU *",field:"sku",placeholder:"PROD-001"},{label:"Stock min.",field:"minStock",type:"number",placeholder:"5"},{label:"Prix (EUR)",field:"unitPrice",type:"number",placeholder:"0.00"},{label:"Unite",field:"unit",placeholder:"unite, kg..."}].map(f=>(<div key={f.field} style={{gridColumn:f.full?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{f.label}</label><input className="if" type={f.type||"text"} placeholder={f.placeholder} value={form[f.field]||""} onChange={e=>setForm(ff=>({...ff,[f.field]:e.target.value}))}/></div>))}
+              {[{label:"Nom *",field:"name",full:true,placeholder:"Nom du produit"},{label:"SKU *",field:"sku",placeholder:"PROD-001"},{label:"Stock min.",field:"minStock",type:"number",placeholder:"5"},{label:"Unite",field:"unit",placeholder:"unite, kg..."}].map(f=>(<div key={f.field} style={{gridColumn:f.full?"1/-1":"auto"}}><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{f.label}</label><input className="if" type={f.type||"text"} placeholder={f.placeholder} value={form[f.field]||""} onChange={e=>setForm(ff=>({...ff,[f.field]:e.target.value}))}/></div>))}
               <div><label style={{display:"block",fontSize:11,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Categorie *</label><select className="if" value={form.category||""} onChange={e=>setForm(ff=>({...ff,category:e.target.value}))}><option value="">-- Choisir --</option>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
             </div>
             <div style={{marginTop:14,padding:14,background:"#f8f8f6",borderRadius:2,border:"1px solid #e8e8e8"}}>
@@ -786,7 +920,7 @@ function StockApp({user, onLogout}){
               </div>);})}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
-              {[{label:"Prix unitaire",val:p.unitPrice.toLocaleString("fr-FR")+" EUR"},{label:"Valeur stock",val:(p.quantity*p.unitPrice).toLocaleString("fr-FR")+" EUR"},{label:"Stock min.",val:p.minStock+" "+p.unit}].map(s=>(<div key={s.label} style={{background:"#f8f8f6",padding:12,borderRadius:2,border:"1px solid #e8e8e8"}}><div style={{fontSize:10,color:"#999",textTransform:"uppercase",marginBottom:4}}>{s.label}</div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14}}>{s.val}</div></div>))}
+              {[{label:"Stock min.",val:p.minStock+" "+p.unit}].map(s=>(<div key={s.label} style={{background:"#f8f8f6",padding:12,borderRadius:2,border:"1px solid #e8e8e8"}}><div style={{fontSize:10,color:"#999",textTransform:"uppercase",marginBottom:4}}>{s.label}</div><div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:14}}>{s.val}</div></div>))}
             </div>
             <div style={{fontSize:11,color:"#555",textTransform:"uppercase",marginBottom:10}}>Historique</div>
             {pm.length===0?<p style={{color:"#444",fontSize:12,padding:"8px 0"}}>Aucun mouvement.</p>:[...pm].reverse().slice(0,5).map(m=>(<div key={m.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #181818"}}>
@@ -816,7 +950,7 @@ function StockApp({user, onLogout}){
                   {label:"Nom *",field:"editName",def:p.name,full:true,placeholder:"Nom du produit"},
                   {label:"SKU *",field:"editSku",def:p.sku,placeholder:"PROD-001"},
                   {label:"Stock min.",field:"editMinStock",def:String(p.minStock),type:"number",placeholder:"5"},
-                  {label:"Prix (EUR)",field:"editUnitPrice",def:String(p.unitPrice),type:"number",placeholder:"0.00"},
+                  
                   {label:"Unite",field:"editUnit",def:p.unit,placeholder:"unite, kg..."},
                 ].map(f=>(
                   <div key={f.field} style={{gridColumn:f.full?"1/-1":"auto"}}>
@@ -845,7 +979,7 @@ function StockApp({user, onLogout}){
                     sku:form.editSku||p.sku,
                     category:form.editCategory||p.category,
                     minStock:parseInt(form.editMinStock)||p.minStock,
-                    unitPrice:parseFloat(form.editUnitPrice)||p.unitPrice,
+                    
                     unit:form.editUnit||p.unit,
                   }:pr);
                   setProducts(updated);
@@ -857,6 +991,27 @@ function StockApp({user, onLogout}){
           </div>
         );
       })()}
+
+      {modal==="add-chantier"&&(
+        <div className="ov" onClick={()=>{setModal(null);setForm({});}}>
+          <div className="mb" onClick={e=>e.stopPropagation()} style={{width:460}}>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,marginBottom:20,color:"#1a1a1a"}}>+ Nouveau chantier</h2>
+            <div style={{marginBottom:14}}>
+              <label style={{display:"block",fontSize:11,color:"#888",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Nom du chantier *</label>
+              <input className="if" placeholder="Ex: Chantier Mairie de Chambery" value={form.chName||""} onChange={e=>setForm(f=>({...f,chName:e.target.value}))}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <label style={{display:"block",fontSize:11,color:"#888",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Adresse / lieu</label>
+              <input className="if" placeholder="Ex: 12 rue de la Paix, 73000 Chambery" value={form.chAdresse||""} onChange={e=>setForm(f=>({...f,chAdresse:e.target.value}))}/>
+            </div>
+
+            <div style={{display:"flex",gap:10,marginTop:22}}>
+              <button className="bo" style={{flex:1}} onClick={()=>{setModal(null);setForm({});}}>Annuler</button>
+              <button className="bp" style={{flex:2}} onClick={handleAddChantier}>Creer le chantier</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast&&<div className={"toast "+toast.type}>{toast.type==="success"?"OK":"ERR"} — {toast.msg}</div>}
     </div>
