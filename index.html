@@ -381,7 +381,6 @@ function StockApp({user, onLogout}){
     const updated=products.map(p=>p.id===form.editId?{...p,
       name:form.editName,sku:form.editSku,category:form.editCategory,
       minStock:parseInt(form.editMinStock)||5,
-      unitPrice:parseFloat(form.editUnitPrice)||0,
       unit:form.editUnit||"unite"
     }:p);
     setProducts(updated);
@@ -527,7 +526,6 @@ function StockApp({user, onLogout}){
                       <div><div style={{fontWeight:500,fontSize:14}}>{loc.name}</div><div style={{fontSize:11,color:"#555",marginTop:2}}>{loc.code}</div></div>
                       <span style={{background:loc.color+"15",border:"1px solid "+loc.color+"30",color:loc.color,fontSize:11,padding:"2px 7px",borderRadius:2,height:"fit-content"}}>{items} art.</span>
                     </div>
-                    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:600,fontSize:18}}>{val.toLocaleString("fr-FR")} EUR</div>
                   </div>);
                 })}
               </div>
@@ -979,7 +977,6 @@ function StockApp({user, onLogout}){
                     sku:form.editSku||p.sku,
                     category:form.editCategory||p.category,
                     minStock:parseInt(form.editMinStock)||p.minStock,
-                    
                     unit:form.editUnit||p.unit,
                   }:pr);
                   setProducts(updated);
