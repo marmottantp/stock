@@ -333,9 +333,12 @@ function StockApp({user, onLogout}) {
 
   const handleMov = () => {
     const {type, productId, locationId, toLocationId, quantity, reason, ref, chantierId} = form;
-    if (!productId||!locationId||!quantity||!reason) return showToast("Champs obligatoires manquants","error");
+    if (!productId||!locationId||!quantity) return showToast("Champs obligatoires manquants","error");
+    if ((type==="entree"||type==="transfert"||type==="retour") && !reason) return showToast("Motif obligatoire pour ce type","error");
     if (type==="transfert" && !toLocationId) return showToast("Choisissez destination","error");
     if (type==="transfert" && locationId===toLocationId) return showToast("Lieux identiques","error");
+    if (type==="retour" && !chantierId) return showToast("Choisissez un chantier source","error");
+    if (type==="retour" && !locationId) return showToast("Choisissez le lieu de destination","error");
     const qty=parseInt(quantity), pId=parseInt(productId), lId=parseInt(locationId);
     const toLId = toLocationId ? parseInt(toLocationId) : null;
     const src = getLS2(pId, lId);
@@ -344,10 +347,11 @@ function StockApp({user, onLogout}) {
     const k = pId+"_"+lId, tk = pId+"_"+toLId;
     if (type==="entree")   nls[k] = (nls[k]||0)+qty;
     if (type==="sortie")   nls[k] = (nls[k]||0)-qty;
+    if (type==="retour")   nls[k] = (nls[k]||0)+qty;
     if (type==="transfert") { nls[k]=(nls[k]||0)-qty; nls[tk]=(nls[tk]||0)+qty; }
     Object.keys(nls).forEach(k2=>{ if(nls[k2]<=0) delete nls[k2]; });
     const chId = chantierId ? parseInt(chantierId) : null;
-    const autoRef = type.slice(0,3).toUpperCase()+"-"+String(nM.current).padStart(3,"0");
+    const autoRef = (type==="retour"?"RET":type.slice(0,3).toUpperCase())+"-"+String(nM.current).padStart(3,"0");
     const nm = [...movements, {id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId,quantity:qty,reason,ref:ref||autoRef,user,chantierId:chId}];
     setLS(nls); setMovements(nm);
     saveAll(null,nm,null,nls,null,null);
@@ -432,8 +436,8 @@ function StockApp({user, onLogout}) {
   };
   const handleLogout = async () => { await window._fa.signOut(window._auth); onLogout(); };
 
-  const tL = t => t==="entree"?"Entree":t==="sortie"?"Sortie":"Transfert";
-  const tC = t => t==="entree"?"tin":t==="sortie"?"tout":"ttrf";
+  const tL = t => t==="entree"?"Entree":t==="sortie"?"Sortie":t==="retour"?"Retour chantier":"Transfert";
+  const tC = t => t==="entree"?"tin":t==="sortie"?"tout":t==="retour"?"ttrf":"ttrf";
 
   if (!dbReady) return (
     <div style={{minHeight:"100vh",background:"#f5f5f3",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"'DM Mono',monospace"}}>
@@ -697,6 +701,7 @@ function StockApp({user, onLogout}) {
               <div style={{display:"flex",gap:8}}>
                 <button className="bo" onClick={()=>{setForm({type:"sortie"});setModal("movement");}}>- Sortie</button>
                 <button className="bo" onClick={()=>{setForm({type:"transfert"});setModal("movement");}}>Transfert</button>
+                <button className="bo" onClick={()=>{setForm({type:"retour"});setModal("movement");}}>↩ Retour</button>
                 <button className="bp" onClick={()=>{setForm({type:"entree"});setModal("movement");}}>+ Entree</button>
               </div>
             </div>
@@ -940,11 +945,11 @@ function StockApp({user, onLogout}) {
       {modal==="movement" && (
         <div className={"ov"+(isMobile?" mob-sheet":"")} onClick={()=>{setModal(null);setForm({});}}>
           <div className="mb" onClick={e=>e.stopPropagation()}>
-            <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,marginBottom:16}}>{form.type==="entree"?"+ Entree":form.type==="sortie"?"- Sortie":">> Transfert"}</h2>
-            <div style={{display:"flex",gap:8,marginBottom:16}}>
-              {["entree","sortie","transfert"].map(t=>(
-                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"8px",border:"1px solid "+(form.type===t?"#e8a000":"#e0e0e0"),background:form.type===t?"#fff8e0":"#fff",color:form.type===t?"#c07800":"#888",cursor:"pointer",borderRadius:2,fontFamily:"'DM Mono',monospace",fontSize:12}}>
-                  {t==="entree"?"+ Entree":t==="sortie"?"- Sortie":">> Transfert"}
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18,marginBottom:16}}>{form.type==="entree"?"+ Entree":form.type==="sortie"?"- Sortie":form.type==="retour"?"↩ Retour chantier":">> Transfert"}</h2>
+            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+              {["entree","sortie","transfert","retour"].map(t=>(
+                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,minWidth:80,padding:"8px",border:"1px solid "+(form.type===t?"#e8a000":"#e0e0e0"),background:form.type===t?"#fff8e0":"#fff",color:form.type===t?"#c07800":"#888",cursor:"pointer",borderRadius:2,fontFamily:"'DM Mono',monospace",fontSize:11}}>
+                  {t==="entree"?"+ Entree":t==="sortie"?"- Sortie":t==="retour"?"↩ Retour":">> Transfert"}
                 </button>
               ))}
             </div>
@@ -966,7 +971,7 @@ function StockApp({user, onLogout}) {
             </div>
             <div style={{display:"grid",gridTemplateColumns:form.type==="transfert"?"1fr 1fr":"1fr",gap:13,marginBottom:13}}>
               <div>
-                <label style={{display:"block",fontSize:11,color:"#888",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{form.type==="transfert"?"Lieu source *":"Lieu *"}</label>
+                <label style={{display:"block",fontSize:11,color:"#888",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>{form.type==="transfert"?"Lieu source *":form.type==="retour"?"Lieu destination (stock) *":"Lieu *"}</label>
                 <select className="if" value={form.locationId||""} onChange={e=>setForm(f=>({...f,locationId:e.target.value}))}>
                   <option value="">-- Choisir --</option>
                   {locations.map(l=>{const q=form.productId?getLS2(parseInt(form.productId),l.id):null;return <option key={l.id} value={l.id}>{l.name}{q!==null?" ("+q+")":""}</option>;})}
@@ -993,8 +998,8 @@ function StockApp({user, onLogout}) {
               </div>
             </div>
             <div style={{marginBottom:13}}>
-              <label style={{display:"block",fontSize:11,color:"#888",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Motif *</label>
-              <input className="if" placeholder="Ex: Commande fournisseur..." value={form.reason||""} onChange={e=>setForm(f=>({...f,reason:e.target.value}))}/>
+              <label style={{display:"block",fontSize:11,color:"#888",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Motif {form.type==="sortie"?"(optionnel)":"*"}</label>
+              <input className="if" placeholder={form.type==="sortie"?"Ex: Utilisation, chantier...":"Ex: Commande fournisseur..."} value={form.reason||""} onChange={e=>setForm(f=>({...f,reason:e.target.value}))}/>
             </div>
             {form.type==="sortie" && (
               <div style={{marginBottom:13}}>
@@ -1002,6 +1007,15 @@ function StockApp({user, onLogout}) {
                 <select className="if" value={form.chantierId||""} onChange={e=>setForm(f=>({...f,chantierId:e.target.value}))}>
                   <option value="">-- Aucun chantier --</option>
                   {chantiers.filter(c=>c.statut==="en cours").map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
+            {form.type==="retour" && (
+              <div style={{marginBottom:13}}>
+                <label style={{display:"block",fontSize:11,color:"#888",marginBottom:5,textTransform:"uppercase",letterSpacing:".08em"}}>Chantier source *</label>
+                <select className="if" value={form.chantierId||""} onChange={e=>setForm(f=>({...f,chantierId:e.target.value}))}>
+                  <option value="">-- Choisir le chantier --</option>
+                  {chantiers.map(c=><option key={c.id} value={c.id}>{c.name} {c.statut==="termine"?"(terminé)":""}</option>)}
                 </select>
               </div>
             )}
