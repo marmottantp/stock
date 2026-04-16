@@ -299,13 +299,13 @@ function StockApp({user, onLogout}) {
       if (sortBy==="quantityAsc") return a.quantity-b.quantity;
       if (sortBy==="category")    return a.category.localeCompare(b.category);
       if (sortBy==="status") {
-        const sc = p => { const r=p.quantity/p.minStock; return p.quantity===0?0:r<=1?1:r<=1.5?2:3; };
+        const sc = p => { const r=p.quantity/p.minStock; return p.quantity===0?0:r<1?1:r<=1.5?2:3; };
         return sc(a)-sc(b);
       }
       return 0;
     });
 
-  const lowStock = enr.filter(p=>p.quantity<=p.minStock);
+  const lowStock = enr.filter(p=>p.quantity<p.minStock);
   const todayMov = movements.filter(m=>m.date===TODAY);
 
   const addCat = () => {
@@ -629,7 +629,7 @@ function StockApp({user, onLogout}) {
                 {fil.length===0 && <p style={{textAlign:"center",color:"#ccc",padding:"32px",fontSize:13}}>Aucun produit trouve.</p>}
                 {fil.map(p=>{
                   const r = p.quantity/p.minStock;
-                  const st = p.quantity===0?"rupture":r<=1?"critique":r<=1.5?"bas":"ok";
+                  const st = p.quantity===0?"rupture":r<1?"critique":r<=1.5?"bas":"ok";
                   return (
                     <div key={p.id} className="mobile-card" onClick={()=>setModal({type:"product-detail",data:p})} style={{cursor:"pointer"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -644,7 +644,7 @@ function StockApp({user, onLogout}) {
                           {locations.map(l=>{const q=getLS2(p.id,l.id);if(!q)return null;return <span key={l.id} className="lp" style={{background:l.color+"18",border:"1px solid "+l.color+"35",color:l.color}}>{l.code} <b>{q}</b></span>;})}
                           {locations.every(l=>!getLS2(p.id,l.id)) && <span style={{color:"#ccc",fontSize:11}}>Aucun stock</span>}
                         </div>
-                        <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:16,color:p.quantity<=p.minStock?"#d05040":"#1a1a1a"}}>{p.quantity} <span style={{fontSize:11,color:"#aaa",fontFamily:"'DM Mono',monospace"}}>{p.unit}</span></span>
+                        <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:16,color:p.quantity<p.minStock?"#d05040":"#1a1a1a"}}>{p.quantity} <span style={{fontSize:11,color:"#aaa",fontFamily:"'DM Mono',monospace"}}>{p.unit}</span></span>
                       </div>
                     </div>
                   );
@@ -659,7 +659,7 @@ function StockApp({user, onLogout}) {
                   <tbody>
                     {fil.map(p=>{
                       const r = p.quantity/p.minStock;
-                      const st = p.quantity===0?"rupture":r<=1?"critique":r<=1.5?"bas":"ok";
+                      const st = p.quantity===0?"rupture":r<1?"critique":r<=1.5?"bas":"ok";
                       return (
                         <tr key={p.id} style={{cursor:"pointer"}} onClick={()=>setModal({type:"product-detail",data:p})}>
                           <td style={{fontWeight:500}}>{p.name}</td>
@@ -1125,7 +1125,7 @@ function StockApp({user, onLogout}) {
                   <h2 style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:18}}>{p.name}</h2>
                   <p style={{color:"#aaa",fontSize:12,marginTop:4}}>{p.sku} — {p.category}</p>
                 </div>
-                <span style={{fontFamily:"'Syne',sans-serif",fontSize:24,fontWeight:700,color:p.quantity<=p.minStock?"#d05040":"#3d9e6a"}}>{p.quantity}</span>
+                <span style={{fontFamily:"'Syne',sans-serif",fontSize:24,fontWeight:700,color:p.quantity<p.minStock?"#d05040":"#3d9e6a"}}>{p.quantity}</span>
               </div>
               <div style={{marginBottom:16}}>
                 <div style={{fontSize:11,color:"#aaa",textTransform:"uppercase",marginBottom:10}}>Repartition par lieu</div>
