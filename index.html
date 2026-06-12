@@ -218,6 +218,7 @@ function StockApp({user, onLogout}) {
   const [isMobile, setIsMobile]         = useState(window.innerWidth <= 640);
   const nP = useRef(1000), nM = useRef(1000), nL = useRef(100), nC = useRef(10);
   const saveT = useRef(null);
+  const isSaving = useRef(false);
   const movementsRef = useRef(DEF_MOVS);
   const locationStockRef = useRef(DEF_LS);
   const userName = user.split("@")[0].charAt(0).toUpperCase() + user.split("@")[0].slice(1);
@@ -247,6 +248,7 @@ function StockApp({user, onLogout}) {
         }
         setDbReady(true); setLastSync(new Date());
         onSnapshot(doc(db,"stockflow","data"), s => {
+          if (isSaving.current) return; // ignorer les updates pendant une sauvegarde
           if (s.exists()) {
             const d = s.data();
             if (d.products)    { setProducts(d.products);   nP.current = Math.max(nP.current,...d.products.map(x=>x.id))+1; }
@@ -269,12 +271,13 @@ function StockApp({user, onLogout}) {
     if (!window._fbReady) return;
     if (saveT.current) clearTimeout(saveT.current);
     saveT.current = setTimeout(async () => {
+      isSaving.current = true;
       setSyncing(true);
       try {
         const clean = sanitize(data);
         const size = new Blob([JSON.stringify(clean)]).size;
         console.log("[StockFlow] Taille document Firebase :", (size/1024).toFixed(1), "Ko");
-        if (size > 900000) { showToast("Document trop lourd ("+Math.round(size/1024)+"Ko) — purger les vieux mouvements","error"); setSyncing(false); return; }
+        if (size > 900000) { showToast("Document trop lourd ("+Math.round(size/1024)+"Ko) — purger les vieux mouvements","error"); return; }
         const {doc, setDoc} = window._fs;
         await setDoc(doc(window._db,"stockflow","data"), clean);
         setLastSync(new Date());
@@ -282,7 +285,7 @@ function StockApp({user, onLogout}) {
         console.error("[StockFlow] Erreur Firebase:", e?.code, e?.message, e);
         showToast("Erreur : "+(e?.code||e?.message||JSON.stringify(e)||"inconnue"),"error");
       }
-      finally { setSyncing(false); }
+      finally { isSaving.current = false; setSyncing(false); }
     }, 600);
   }, []);
 
