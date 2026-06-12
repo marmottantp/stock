@@ -218,6 +218,8 @@ function StockApp({user, onLogout}) {
   const [isMobile, setIsMobile]         = useState(window.innerWidth <= 640);
   const nP = useRef(1000), nM = useRef(1000), nL = useRef(100), nC = useRef(10);
   const saveT = useRef(null);
+  const movementsRef = useRef(DEF_MOVS);
+  const locationStockRef = useRef(DEF_LS);
   const userName = user.split("@")[0].charAt(0).toUpperCase() + user.split("@")[0].slice(1);
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); };
@@ -280,6 +282,10 @@ function StockApp({user, onLogout}) {
     locationStock: ls||locationStock, categories: c||categories, chantiers: ch||chantiers
   });
 
+  // Toujours garder les refs à jour pour éviter les closures périmées dans handleMov
+  useEffect(() => { movementsRef.current = movements; }, [movements]);
+  useEffect(() => { locationStockRef.current = locationStock; }, [locationStock]);
+
   const getTS  = pid => Object.entries(locationStock).filter(([k])=>k.startsWith(pid+"_")).reduce((s,[,v])=>s+v,0);
   const getLS2 = (pid,lid) => locationStock[pid+"_"+lid]||0;
   const getLN  = id => locations.find(l=>l.id===id)?.name||"--";
@@ -299,7 +305,7 @@ function StockApp({user, onLogout}) {
       if (sortBy==="quantityAsc") return a.quantity-b.quantity;
       if (sortBy==="category")    return a.category.localeCompare(b.category);
       if (sortBy==="status") {
-        const sc = p => { const r=p.quantity/p.minStock; return p.quantity===0?0:r<1?1:r<=1.5?2:3; };
+        const sc = p => { const r=p.quantity/p.minStock; return p.quantity===0?0:r<=1?1:r<=1.5?2:3; };
         return sc(a)-sc(b);
       }
       return 0;
@@ -341,9 +347,12 @@ function StockApp({user, onLogout}) {
     if (type==="retour" && !locationId) return showToast("Choisissez le lieu de destination","error");
     const qty=parseInt(quantity), pId=parseInt(productId), lId=parseInt(locationId);
     const toLId = toLocationId ? parseInt(toLocationId) : null;
-    const src = getLS2(pId, lId);
+    // Lire depuis les refs pour avoir les valeurs les plus récentes (évite les closures périmées)
+    const currentLS = {...locationStockRef.current};
+    const currentMov = movementsRef.current;
+    const src = currentLS[pId+"_"+lId]||0;
     if ((type==="sortie"||type==="transfert") && src<qty) return showToast("Stock insuffisant ("+src+" dispo)","error");
-    const nls = {...locationStock};
+    const nls = {...currentLS};
     const k = pId+"_"+lId, tk = pId+"_"+toLId;
     if (type==="entree")   nls[k] = (nls[k]||0)+qty;
     if (type==="sortie")   nls[k] = (nls[k]||0)-qty;
@@ -352,7 +361,7 @@ function StockApp({user, onLogout}) {
     Object.keys(nls).forEach(k2=>{ if(nls[k2]<=0) delete nls[k2]; });
     const chId = chantierId ? parseInt(chantierId) : null;
     const autoRef = (type==="retour"?"RET":type.slice(0,3).toUpperCase())+"-"+String(nM.current).padStart(3,"0");
-    const nm = [...movements, {id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId,quantity:qty,reason,ref:ref||autoRef,user,chantierId:chId}];
+    const nm = [...currentMov, {id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId,quantity:qty,reason,ref:ref||autoRef,user,chantierId:chId}];
     setLS(nls); setMovements(nm);
     saveAll(null,nm,null,nls,null,null);
     showToast("Mouvement enregistre !"); setModal(null); setForm({});
