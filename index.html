@@ -263,16 +263,25 @@ function StockApp({user, onLogout}) {
     init();
   }, []);
 
+  const sanitize = (obj) => JSON.parse(JSON.stringify(obj, (k,v) => v === undefined ? null : v));
+
   const save = useCallback((data) => {
     if (!window._fbReady) return;
     if (saveT.current) clearTimeout(saveT.current);
     saveT.current = setTimeout(async () => {
       setSyncing(true);
       try {
+        const clean = sanitize(data);
+        const size = new Blob([JSON.stringify(clean)]).size;
+        console.log("[StockFlow] Taille document Firebase :", (size/1024).toFixed(1), "Ko");
+        if (size > 900000) { showToast("Document trop lourd ("+Math.round(size/1024)+"Ko) — purger les vieux mouvements","error"); setSyncing(false); return; }
         const {doc, setDoc} = window._fs;
-        await setDoc(doc(window._db,"stockflow","data"), data);
+        await setDoc(doc(window._db,"stockflow","data"), clean);
         setLastSync(new Date());
-      } catch { showToast("Erreur sauvegarde","error"); }
+      } catch(e) {
+        console.error("[StockFlow] Erreur Firebase:", e?.code, e?.message, e);
+        showToast("Erreur : "+(e?.code||e?.message||JSON.stringify(e)||"inconnue"),"error");
+      }
       finally { setSyncing(false); }
     }, 600);
   }, []);
@@ -361,9 +370,12 @@ function StockApp({user, onLogout}) {
     Object.keys(nls).forEach(k2=>{ if(nls[k2]<=0) delete nls[k2]; });
     const chId = chantierId ? parseInt(chantierId) : null;
     const autoRef = (type==="retour"?"RET":type.slice(0,3).toUpperCase())+"-"+String(nM.current).padStart(3,"0");
-    const nm = [...currentMov, {id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId,quantity:qty,reason,ref:ref||autoRef,user,chantierId:chId}];
-    setLS(nls); setMovements(nm);
-    saveAll(null,nm,null,nls,null,null);
+    const newMov = {id:nM.current++,date:TODAY,type,productId:pId,locationId:lId,toLocationId:toLId??null,quantity:qty,reason:reason??null,ref:ref||autoRef,user,chantierId:chId??null};
+    const nm = [...currentMov, newMov];
+    const cleanMov = nm.map(m=>Object.fromEntries(Object.entries(m).map(([k,v])=>[k,v===undefined?null:v])));
+    const cleanLS = Object.fromEntries(Object.entries(nls).map(([k,v])=>[k,v===undefined?null:v]));
+    setLS(cleanLS); setMovements(cleanMov);
+    saveAll(null,cleanMov,null,cleanLS,null,null);
     showToast("Mouvement enregistre !"); setModal(null); setForm({});
   };
 
