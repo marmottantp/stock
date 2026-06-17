@@ -25,7 +25,7 @@
     window._fs  = {
       doc:        (db, ...args) => db.collection(args[0]).doc(args[1]),
       setDoc:     (ref, data)   => ref.set(data),
-      getDoc:     (ref)         => ref.get(),
+      getDoc:     (ref)         => ref.get().then(snap => ({ exists: () => snap.exists, data: () => snap.data() })),
       onSnapshot: (ref, cb)     => ref.onSnapshot(snap => cb({ exists: () => snap.exists, data: () => snap.data() }))
     };
     window._fa  = {
@@ -473,8 +473,10 @@ function StockApp({
         db = window._db;
       try {
         const snap = await getDoc(doc(db, "stockflow", "data"));
+        console.log("[StockFlow] getDoc exists:", snap.exists(), "data:", snap.data());
         if (snap.exists()) {
           const d = snap.data();
+          console.log("[StockFlow] produits:", d.products?.length, "mouvements:", d.movements?.length);
           if (d.products) {
             setProducts(d.products);
             nP.current = Math.max(...d.products.map(x => x.id)) + 1;
@@ -493,6 +495,8 @@ function StockApp({
             setChantiers(d.chantiers);
             nC.current = Math.max(...d.chantiers.map(x => x.id)) + 1;
           }
+        } else {
+          console.warn("[StockFlow] Document Firestore vide ou inexistant !");
         }
         setDbReady(true);
         setLastSync(new Date());
