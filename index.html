@@ -17,9 +17,11 @@
       messagingSenderId: "1085068993204",
       appId: "1:1085068993204:web:84de77250e17d2df50ade1"
     };
+    console.log("[StockFlow] Firebase object:", typeof firebase);
     firebase.initializeApp(cfg);
     const _db   = firebase.firestore();
     const _auth = firebase.auth();
+    console.log("[StockFlow] Auth initialisé:", typeof _auth);
     window._db  = _db;
     window._auth = _auth;
     window._fs  = {
