@@ -39,6 +39,8 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
   <style>body{margin:0;padding:0;background:#f5f5f3;}</style>
 </head>
 <body>
@@ -74,7 +76,6 @@ const TODAY = new Date().toISOString().split("T")[0];
 const LOC_COLORS = ["#6090e0","#4caf7c","#f0a040","#e07080","#b080e0","#60c0d0","#e0c040"];
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#f0f0f0}::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px}
 input,select{outline:none}
