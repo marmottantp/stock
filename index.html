@@ -4,11 +4,11 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
   <title>StockFlow — Marmottan TP</title>
-  <!-- Firebase AVANT Babel pour éviter le conflit avec les imports ES modules -->
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-  <script>
+  <!-- Firebase ES modules — Babel ne traite que les scripts type="text/babel" -->
+  <script type="module" id="fb-init">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     const cfg = {
       apiKey: "AIzaSyCnRgJTXjBvHYwAxoGk_iUvQtC72wk2274",
       authDomain: "stock-marmottan-tp.firebaseapp.com",
@@ -17,24 +17,11 @@
       messagingSenderId: "1085068993204",
       appId: "1:1085068993204:web:84de77250e17d2df50ade1"
     };
-    console.log("[StockFlow] Firebase object:", typeof firebase);
-    firebase.initializeApp(cfg);
-    const _db   = firebase.firestore();
-    const _auth = firebase.auth();
-    console.log("[StockFlow] Auth initialisé:", typeof _auth);
-    window._db  = _db;
-    window._auth = _auth;
-    window._fs  = {
-      doc:        (db, ...args) => db.collection(args[0]).doc(args[1]),
-      setDoc:     (ref, data)   => ref.set(data),
-      getDoc:     (ref)         => ref.get().then(snap => ({ exists: () => snap.exists, data: () => snap.data() })),
-      onSnapshot: (ref, cb)     => ref.onSnapshot(snap => cb({ exists: () => snap.exists, data: () => snap.data() }))
-    };
-    window._fa  = {
-      signInWithEmailAndPassword: (auth, email, pw) => auth.signInWithEmailAndPassword(email, pw),
-      signOut:            (auth)         => auth.signOut(),
-      onAuthStateChanged: (auth, cb)     => auth.onAuthStateChanged(cb)
-    };
+    const app = initializeApp(cfg);
+    window._db   = getFirestore(app);
+    window._auth = getAuth(app);
+    window._fs   = { doc, setDoc, getDoc, onSnapshot };
+    window._fa   = { signInWithEmailAndPassword, signOut, onAuthStateChanged };
     window._fbReady = true;
     window.dispatchEvent(new Event("fb-ready"));
   </script>
